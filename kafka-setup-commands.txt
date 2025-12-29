@@ -1,0 +1,42 @@
+KAFKA SETUP COMMANDS
+====================
+
+Step 1: Access Kafka Container
+-------------------------------
+docker exec -it dlq-kafka bash
+
+
+Step 2: Create Topics (run inside Kafka container)
+---------------------------------------------------
+kafka-topics --create --topic orders --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+kafka-topics --create --topic orders-dlq --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+kafka-topics --create --topic payments --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+kafka-topics --create --topic payments-dlq --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+
+Step 3: Verify Topics
+----------------------
+kafka-topics --list --bootstrap-server localhost:9092
+
+
+Step 4: Add Test Messages
+--------------------------
+First, run this command:
+
+kafka-console-producer --topic orders-dlq --bootstrap-server localhost:9092 --property "parse.key=true" --property "key.separator=:"
+
+Then type these messages one by one:
+
+ORD-001:{"orderId":"ORD-001","amount":1500,"error":"DB Connection Timeout"}
+ORD-002:{"orderId":"ORD-002","amount":2500,"error":"Invalid JSON"}
+ORD-003:{"orderId":"ORD-003","amount":3500,"error":"Validation Failed"}
+
+Press Ctrl+C to exit the producer
+
+
+Step 5: Exit Container
+-----------------------
+exit

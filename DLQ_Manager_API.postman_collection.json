@@ -1,0 +1,109 @@
+{
+	"info": {
+		"name": "DLQ Manager API",
+		"description": "API endpoints for Kafka Dead Letter Queue Manager",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Test Endpoints",
+			"item": [
+				{
+					"name": "Hello World",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/test/hello",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"test",
+								"hello"
+							]
+						},
+						"description": "Simple hello world endpoint to verify API is working"
+					},
+					"response": []
+				},
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/test/health",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"test",
+								"health"
+							]
+						},
+						"description": "Health check endpoint returning server status"
+					},
+					"response": []
+				},
+				{
+					"name": "Echo with Message",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/test/echo?message=Testing123",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"test",
+								"echo"
+							],
+							"query": [
+								{
+									"key": "message",
+									"value": "Testing123",
+									"description": "Message to echo back"
+								}
+							]
+						},
+						"description": "Echo endpoint that returns the message you send"
+					},
+					"response": []
+				},
+				{
+					"name": "Echo without Message (Error Test)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/test/echo",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"test",
+								"echo"
+							]
+						},
+						"description": "Test error handling when no message parameter is provided"
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
