@@ -1,0 +1,304 @@
+{
+	"info": {
+		"name": "DLQ Manager - Full API",
+		"description": "Complete API endpoints for DLQ Manager - Phase 1",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "dlqTopicId",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Kafka Endpoints",
+			"item": [
+				{
+					"name": "List All Kafka Topics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/kafka/topics",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "kafka", "topics"]
+						},
+						"description": "Lists all topics in the Kafka cluster"
+					}
+				},
+				{
+					"name": "Check Topic Exists",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/kafka/topics/orders-dlq/exists",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "kafka", "topics", "orders-dlq", "exists"]
+						},
+						"description": "Check if a specific topic exists in Kafka"
+					}
+				},
+				{
+					"name": "Auto-Discover DLQ Topics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/kafka/discover-dlqs",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "kafka", "discover-dlqs"]
+						},
+						"description": "Auto-discover DLQ topics based on naming conventions (-dlq, -dead-letter, -error)"
+					}
+				},
+				{
+					"name": "Get Cluster Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/kafka/cluster-info",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "kafka", "cluster-info"]
+						},
+						"description": "Get Kafka cluster information (cluster ID, broker count, topic count)"
+					}
+				}
+			],
+			"description": "Endpoints for Kafka cluster information"
+		},
+		{
+			"name": "DLQ Management",
+			"item": [
+				{
+					"name": "List All DLQ Topics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics"]
+						},
+						"description": "Get all registered DLQ topics from database"
+					}
+				},
+				{
+					"name": "List Active DLQ Topics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/filter/active",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "filter", "active"]
+						},
+						"description": "Get only active DLQ topics (status = ACTIVE)"
+					}
+				},
+				{
+					"name": "Register DLQ - orders-dlq",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Save the DLQ ID for later use",
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.collectionVariables.set('dlqTopicId', jsonData.dlqTopic.id);",
+									"    console.log('Saved DLQ ID:', jsonData.dlqTopic.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicName\": \"orders-dlq\",\n    \"sourceTopic\": \"orders\",\n    \"detectionType\": \"MANUAL\",\n    \"errorFieldPath\": \"headers.error-message\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics"]
+						},
+						"description": "Register a new DLQ topic. Auto-saves the ID to collection variable."
+					}
+				},
+				{
+					"name": "Register DLQ - payments-dlq",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicName\": \"payments-dlq\",\n    \"sourceTopic\": \"payments\",\n    \"detectionType\": \"AUTO\",\n    \"errorFieldPath\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics"]
+						},
+						"description": "Register payments-dlq (example with AUTO detection)"
+					}
+				},
+				{
+					"name": "Get DLQ by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}"]
+						},
+						"description": "Get a specific DLQ by ID (uses saved dlqTopicId variable)"
+					}
+				},
+				{
+					"name": "Update DLQ - Change Status to PAUSED",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"status\": \"PAUSED\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}"]
+						},
+						"description": "Update DLQ status to PAUSED"
+					}
+				},
+				{
+					"name": "Update DLQ - Change Source Topic",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"sourceTopic\": \"orders-v2\",\n    \"errorFieldPath\": \"payload.error.message\",\n    \"status\": \"ACTIVE\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}"]
+						},
+						"description": "Update multiple fields of a DLQ"
+					}
+				},
+				{
+					"name": "Delete DLQ",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}"]
+						},
+						"description": "Delete a DLQ registration (uses saved dlqTopicId variable)"
+					}
+				}
+			],
+			"description": "CRUD operations for DLQ topic management"
+		},
+		{
+			"name": "Test Scenarios",
+			"item": [
+				{
+					"name": "Scenario 1: Register Non-Existent Topic (Should Fail)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicName\": \"fake-topic-dlq\",\n    \"sourceTopic\": \"fake-topic\",\n    \"detectionType\": \"MANUAL\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics"]
+						},
+						"description": "Test validation - should return 400 error because topic doesn't exist in Kafka"
+					}
+				},
+				{
+					"name": "Scenario 2: Register Duplicate DLQ (Should Fail)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicName\": \"orders-dlq\",\n    \"sourceTopic\": \"orders\",\n    \"detectionType\": \"MANUAL\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics"]
+						},
+						"description": "Test duplicate detection - should fail if orders-dlq is already registered"
+					}
+				},
+				{
+					"name": "Scenario 3: Get Non-Existent DLQ (Should Return 404)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/00000000-0000-0000-0000-000000000000",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "00000000-0000-0000-0000-000000000000"]
+						},
+						"description": "Test 404 handling - should return error for non-existent ID"
+					}
+				}
+			],
+			"description": "Test error handling and validation"
+		}
+	]
+}

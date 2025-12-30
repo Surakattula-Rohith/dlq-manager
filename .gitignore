@@ -39,3 +39,6 @@ dist/
 *.tmp
 *.temp
 
+# Claude/IDE local files
+.claude/
+
