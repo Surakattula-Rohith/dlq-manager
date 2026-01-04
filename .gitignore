@@ -42,3 +42,10 @@ dist/
 # Claude/IDE local files
 .claude/
 
+# Local documentation (not tracked in git)
+SESSION_SUMMARY.md
+SESSION_SUMMARY_Dec30.md
+SESSION_SUMMARY_Jan04.md
+PROJECT_SPEC.md
+kafka-setup-commands.txt
+
