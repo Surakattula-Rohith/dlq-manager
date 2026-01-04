@@ -238,6 +238,169 @@
 			"description": "CRUD operations for DLQ topic management"
 		},
 		{
+			"name": "Message Browsing",
+			"item": [
+				{
+					"name": "Browse Messages - Page 1 (Default)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/messages?page=1&size=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (1-based)"
+								},
+								{
+									"key": "size",
+									"value": "10",
+									"description": "Messages per page (1-100)"
+								}
+							]
+						},
+						"description": "Browse messages from a DLQ topic with pagination. Returns message details including payload, headers, error info, and pagination metadata."
+					}
+				},
+				{
+					"name": "Browse Messages - Page 2",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/messages?page=2&size=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
+							"query": [
+								{
+									"key": "page",
+									"value": "2"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Get the second page of messages (messages 11-20)"
+					}
+				},
+				{
+					"name": "Browse Messages - Custom Page Size (5)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/messages?page=1&size=5",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "size",
+									"value": "5",
+									"description": "Show only 5 messages per page"
+								}
+							]
+						},
+						"description": "Browse with custom page size - useful for testing different page sizes"
+					}
+				},
+				{
+					"name": "Browse Messages - All (Size 100)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/messages?page=1&size=100",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "size",
+									"value": "100",
+									"description": "Maximum page size is 100"
+								}
+							]
+						},
+						"description": "Get up to 100 messages at once (max page size)"
+					}
+				},
+				{
+					"name": "Get Message Count",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/message-count",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "message-count"]
+						},
+						"description": "Get total message count for a DLQ topic without fetching all messages. Useful for pagination UI."
+					}
+				},
+				{
+					"name": "Test: Invalid Page Number (Should Fail)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/messages?page=0&size=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
+							"query": [
+								{
+									"key": "page",
+									"value": "0",
+									"description": "Invalid - page must be >= 1"
+								},
+								{
+									"key": "size",
+									"value": "10"
+								}
+							]
+						},
+						"description": "Test validation: Page number must be >= 1. Should return 400 Bad Request."
+					}
+				},
+				{
+					"name": "Test: Invalid Page Size (Should Fail)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/messages?page=1&size=101",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "size",
+									"value": "101",
+									"description": "Invalid - size must be <= 100"
+								}
+							]
+						},
+						"description": "Test validation: Page size must be between 1 and 100. Should return 400 Bad Request."
+					}
+				}
+			],
+			"description": "Browse messages from DLQ topics with pagination and filtering"
+		},
+		{
 			"name": "Test Scenarios",
 			"item": [
 				{

@@ -1,9 +1,11 @@
 package com.dlqmanager.controller;
 
+import com.dlqmanager.model.dto.DlqMessageDto;
 import com.dlqmanager.model.dto.DlqTopicResponse;
 import com.dlqmanager.model.dto.RegisterDlqRequest;
 import com.dlqmanager.model.dto.UpdateDlqRequest;
 import com.dlqmanager.model.entity.DlqTopic;
+import com.dlqmanager.service.DlqBrowserService;
 import com.dlqmanager.service.DlqDiscoveryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ import java.util.stream.Collectors;
 public class DlqTopicController {
 
     private final DlqDiscoveryService dlqDiscoveryService;
+    private final DlqBrowserService dlqBrowserService;
 
     /**
      * List all registered DLQ topics
@@ -224,6 +227,107 @@ public class DlqTopicController {
         } catch (Exception e) {
             log.error("Failed to list active DLQ topics", e);
             return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    /**
+     * Browse messages from a DLQ topic with pagination
+     *
+     * GET /api/dlq-topics/{id}/messages?page=1&size=10
+     *
+     * Purpose: Fetch messages from the DLQ for viewing
+     *
+     * Query Parameters:
+     * - page: Page number (1-based, default: 1)
+     * - size: Messages per page (default: 10, max: 100)
+     *
+     * @param id The UUID of the DLQ topic
+     * @param page Page number (optional, default 1)
+     * @param size Page size (optional, default 10)
+     * @return List of messages with pagination info
+     */
+    @GetMapping("/{id}/messages")
+    public ResponseEntity<Map<String, Object>> getMessages(
+        @PathVariable UUID id,
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "10") int size
+    ) {
+        log.info("API: GET /api/dlq-topics/{}/messages?page={}&size={}", id, page, size);
+
+        // Validate pagination parameters
+        if (page < 1) {
+            return createErrorResponse(HttpStatus.BAD_REQUEST, "Page number must be >= 1");
+        }
+        if (size < 1 || size > 100) {
+            return createErrorResponse(HttpStatus.BAD_REQUEST, "Page size must be between 1 and 100");
+        }
+
+        try {
+            // Fetch messages from Kafka
+            List<DlqMessageDto> messages = dlqBrowserService.getMessages(id, page, size);
+
+            // Get total count for pagination metadata
+            long totalMessages = dlqBrowserService.getMessageCount(id);
+            int totalPages = (int) Math.ceil((double) totalMessages / size);
+
+            // Build response with pagination metadata
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("messages", messages);
+            response.put("pagination", Map.of(
+                "currentPage", page,
+                "pageSize", size,
+                "totalMessages", totalMessages,
+                "totalPages", totalPages,
+                "hasNextPage", page < totalPages,
+                "hasPreviousPage", page > 1
+            ));
+
+            log.info("Successfully fetched {} messages for DLQ topic {}", messages.size(), id);
+            return ResponseEntity.ok(response);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("DLQ topic not found: {}", id);
+            return createErrorResponse(HttpStatus.NOT_FOUND, e.getMessage());
+
+        } catch (Exception e) {
+            log.error("Failed to fetch messages for DLQ topic: {}", id, e);
+            return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Failed to fetch messages: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get total message count for a DLQ topic
+     *
+     * GET /api/dlq-topics/{id}/message-count
+     *
+     * Purpose: Useful for displaying total messages without fetching all of them
+     *
+     * @param id The UUID of the DLQ topic
+     * @return Total message count
+     */
+    @GetMapping("/{id}/message-count")
+    public ResponseEntity<Map<String, Object>> getMessageCount(@PathVariable UUID id) {
+        log.info("API: GET /api/dlq-topics/{}/message-count", id);
+
+        try {
+            long totalMessages = dlqBrowserService.getMessageCount(id);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("totalMessages", totalMessages);
+
+            return ResponseEntity.ok(response);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("DLQ topic not found: {}", id);
+            return createErrorResponse(HttpStatus.NOT_FOUND, e.getMessage());
+
+        } catch (Exception e) {
+            log.error("Failed to get message count for DLQ topic: {}", id, e);
+            return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Failed to get message count: " + e.getMessage());
         }
     }
 
