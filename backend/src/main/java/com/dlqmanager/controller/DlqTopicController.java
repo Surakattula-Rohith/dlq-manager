@@ -2,6 +2,7 @@ package com.dlqmanager.controller;
 
 import com.dlqmanager.model.dto.DlqMessageDto;
 import com.dlqmanager.model.dto.DlqTopicResponse;
+import com.dlqmanager.model.dto.ErrorBreakdownDto;
 import com.dlqmanager.model.dto.RegisterDlqRequest;
 import com.dlqmanager.model.dto.UpdateDlqRequest;
 import com.dlqmanager.model.entity.DlqTopic;
@@ -14,10 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -328,6 +326,72 @@ public class DlqTopicController {
             log.error("Failed to get message count for DLQ topic: {}", id, e);
             return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Failed to get message count: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get error breakdown statistics for a DLQ topic
+     *
+     * GET /api/dlq-topics/{id}/error-breakdown
+     *
+     * Purpose: Analyze all messages and show breakdown by error type
+     *
+     * This endpoint helps answer:
+     * - What are the most common errors in this DLQ?
+     * - What percentage of failures are due to each error type?
+     * - Which errors should we prioritize fixing?
+     *
+     * Response includes:
+     * - Total message count
+     * - List of error types with count and percentage
+     * - Sorted by count (most common errors first)
+     *
+     * @param id The UUID of the DLQ topic
+     * @return Error breakdown statistics
+     */
+    @GetMapping("/{id}/error-breakdown")
+    public ResponseEntity<Map<String, Object>> getErrorBreakdown(@PathVariable UUID id) {
+        log.info("API: GET /api/dlq-topics/{}/error-breakdown", id);
+
+        try {
+            // Get error counts from service
+            Map<String, Long> errorCounts = dlqBrowserService.getErrorBreakdown(id);
+
+            // Calculate total messages
+            long totalMessages = errorCounts.values().stream()
+                    .mapToLong(Long::longValue)
+                    .sum();
+
+            // Convert to DTO list with percentages
+            List<ErrorBreakdownDto> errorBreakdown = errorCounts.entrySet().stream()
+                    .map(entry -> {
+                        String errorType = entry.getKey();
+                        Long count = entry.getValue();
+                        Double percentage = (count * 100.0) / totalMessages;
+                        return new ErrorBreakdownDto(errorType, count, percentage);
+                    })
+                    .sorted(Comparator.comparing(ErrorBreakdownDto::getCount).reversed()) // Sort by count descending
+                    .collect(Collectors.toList());
+
+            // Build response
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("totalMessages", totalMessages);
+            response.put("errorBreakdown", errorBreakdown);
+
+            log.info("Successfully generated error breakdown for DLQ topic {}. Total messages: {}, Distinct errors: {}",
+                    id, totalMessages, errorBreakdown.size());
+
+            return ResponseEntity.ok(response);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("DLQ topic not found: {}", id);
+            return createErrorResponse(HttpStatus.NOT_FOUND, e.getMessage());
+
+        } catch (Exception e) {
+            log.error("Failed to get error breakdown for DLQ topic: {}", id, e);
+            return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Failed to get error breakdown: " + e.getMessage());
         }
     }
 

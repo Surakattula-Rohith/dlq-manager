@@ -350,6 +350,19 @@
 					}
 				},
 				{
+					"name": "Get Error Breakdown",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/error-breakdown",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "error-breakdown"]
+						},
+						"description": "Get error breakdown statistics for a DLQ topic. Shows breakdown by error type with counts and percentages. This helps identify the most common errors and prioritize fixes."
+					}
+				},
+				{
 					"name": "Test: Invalid Page Number (Should Fail)",
 					"request": {
 						"method": "GET",

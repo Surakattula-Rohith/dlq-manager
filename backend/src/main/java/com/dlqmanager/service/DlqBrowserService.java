@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * DLQ Browser Service
@@ -185,6 +186,109 @@ public class DlqBrowserService {
         } finally {
             consumer.close();
         }
+    }
+
+    /**
+     * Get error breakdown statistics for a DLQ topic
+     *
+     * Purpose: Analyze all messages in the DLQ and group them by error type
+     *
+     * This helps answer questions like:
+     * - What are the most common errors?
+     * - What percentage of failures are due to DB timeouts vs validation errors?
+     * - Should we prioritize fixing error type A or B?
+     *
+     * How it works:
+     * 1. Read ALL messages from the topic (not paginated)
+     * 2. Extract error type from each message's X-Error-Message header
+     * 3. Group messages by error type
+     * 4. Count occurrences of each error type
+     * 5. Return Map of errorType -> count
+     *
+     * Note: This reads all messages, so it may be slow for very large DLQ topics.
+     * For topics with millions of messages, consider caching or sampling.
+     *
+     * @param dlqTopicId UUID of the DLQ topic
+     * @return Map where key = error type, value = count of messages with that error
+     */
+    public Map<String, Long> getErrorBreakdown(UUID dlqTopicId) {
+        log.info("Getting error breakdown for DLQ topic ID: {}", dlqTopicId);
+
+        // Step 1: Look up DLQ topic
+        DlqTopic dlqTopic = dlqTopicRepository.findById(dlqTopicId)
+                .orElseThrow(() -> new RuntimeException("DLQ topic not found: " + dlqTopicId));
+
+        String topicName = dlqTopic.getDlqTopicName();
+        log.info("Topic name: {}", topicName);
+
+        // Step 2: Create Kafka Consumer
+        KafkaConsumer<String, String> consumer = createConsumer();
+
+        Map<String, Long> errorCounts = new HashMap<>();
+
+        try {
+            // Step 3: Assign to partition 0
+            TopicPartition partition0 = new TopicPartition(topicName, 0);
+            consumer.assign(Collections.singletonList(partition0));
+
+            // Step 4: Seek to beginning (read from start)
+            consumer.seekToBeginning(Collections.singletonList(partition0));
+
+            // Step 5: Read ALL messages
+            // We'll poll multiple times until we've read everything
+            boolean keepReading = true;
+            int pollCount = 0;
+            int maxPolls = 1000;  // Safety limit to prevent infinite loop
+            int totalMessagesRead = 0;
+
+            while (keepReading && pollCount < maxPolls) {
+                ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(2));
+                pollCount++;
+
+                if (records.isEmpty()) {
+                    // No more messages available
+                    log.info("No more messages to read. Stopping.");
+                    keepReading = false;
+                } else {
+                    // Process each message
+                    for (ConsumerRecord<String, String> record : records) {
+                        totalMessagesRead++;
+
+                        // Extract error type from headers
+                        String errorType = null;
+                        for (var header : record.headers()) {
+                            if ("X-Error-Message".equals(header.key())) {
+                                errorType = new String(header.value());
+                                break;
+                            }
+                        }
+
+                        // If no error header found, classify as "Unknown"
+                        if (errorType == null || errorType.trim().isEmpty()) {
+                            errorType = "Unknown Error";
+                        }
+
+                        // Count this error type
+                        errorCounts.put(errorType, errorCounts.getOrDefault(errorType, 0L) + 1);
+                    }
+                }
+            }
+
+            log.info("Read {} messages from topic {}. Found {} distinct error types.",
+                    totalMessagesRead, topicName, errorCounts.size());
+
+            // Log the breakdown
+            errorCounts.forEach((errorType, count) ->
+                    log.info("  - {}: {} messages", errorType, count));
+
+        } catch (Exception e) {
+            log.error("Error getting error breakdown", e);
+            throw new RuntimeException("Failed to get error breakdown for topic: " + topicName, e);
+        } finally {
+            consumer.close();
+        }
+
+        return errorCounts;
     }
 
     /**
