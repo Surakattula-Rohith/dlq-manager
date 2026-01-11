@@ -25,6 +25,14 @@ A production-ready Dead Letter Queue (DLQ) management system for Apache Kafka. M
 - Prioritize fixes based on error frequency
 - Real-time message count
 
+### ✅ Message Replay
+- Replay single messages back to source topic
+- Bulk replay multiple messages in one operation
+- Complete audit trail with job tracking
+- Success/failure tracking for each message
+- Header cleanup (removes DLQ headers, adds replay markers)
+- Idempotent and reliable producer configuration
+
 ### ✅ Kafka Integration
 - List all Kafka topics
 - Check topic existence
@@ -32,7 +40,6 @@ A production-ready Dead Letter Queue (DLQ) management system for Apache Kafka. M
 - Kafka Admin API integration
 
 ### 🚧 Coming Soon
-- Message replay (single and bulk)
 - Advanced filtering and search
 - Real-time dashboard
 - Alert notifications
@@ -120,6 +127,15 @@ Import `DLQ_Manager_Full_API.postman_collection.json` into Postman and test all 
 - `page` (required): Page number, 1-based (min: 1)
 - `size` (required): Messages per page (1-100)
 
+### Message Replay
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/replay/single` | Replay a single message to source topic |
+| POST | `/api/replay/bulk` | Replay multiple messages in bulk |
+| GET | `/api/replay/jobs/{id}` | Get replay job status by ID |
+| GET | `/api/replay/history` | Get all replay jobs |
+| GET | `/api/replay/history/dlq/{dlqTopicId}` | Get replay history for specific DLQ |
+
 ## Example Usage
 
 ### Register a DLQ Topic
@@ -164,6 +180,64 @@ Response:
 }
 ```
 
+### Replay Single Message
+```bash
+curl -X POST http://localhost:8080/api/replay/single \
+  -H "Content-Type: application/json" \
+  -d '{
+    "dlqTopicId": "abc-123-uuid",
+    "messageOffset": 42,
+    "messagePartition": 0,
+    "initiatedBy": "admin@company.com"
+  }'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Message replayed successfully",
+  "replayJob": {
+    "id": "job-uuid",
+    "status": "COMPLETED",
+    "totalMessages": 1,
+    "succeeded": 1,
+    "failed": 0
+  }
+}
+```
+
+### Bulk Replay Messages
+```bash
+curl -X POST http://localhost:8080/api/replay/bulk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "dlqTopicId": "abc-123-uuid",
+    "messages": [
+      {"offset": 51, "partition": 0},
+      {"offset": 52, "partition": 0},
+      {"offset": 53, "partition": 0}
+    ],
+    "initiatedBy": "admin@company.com"
+  }'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "All 3 messages replayed successfully",
+  "replayJob": {
+    "id": "job-uuid",
+    "status": "COMPLETED",
+    "totalMessages": 3,
+    "succeeded": 3,
+    "failed": 0,
+    "successRate": 100.0
+  }
+}
+```
+
 ## Message Format
 
 Messages in DLQ topics should include these headers for proper tracking:
@@ -198,6 +272,12 @@ docker exec -it dlq-postgres psql -U dlquser -d dlqmanager
 
 # View registered DLQs
 SELECT * FROM dlq_topics;
+
+# View replay jobs
+SELECT * FROM replay_jobs ORDER BY created_at DESC;
+
+# View replay messages (individual message results in bulk replays)
+SELECT * FROM replay_messages WHERE replay_job_id = 'your-job-uuid';
 ```
 
 ### Kafka Commands
@@ -261,16 +341,21 @@ dlq-manager/
 │   (Spring Boot)         │
 ├─────────────────────────┤
 │ • DlqTopicController    │
+│ • ReplayController      │
 │ • KafkaController       │
 │ • DlqDiscoveryService   │
 │ • DlqBrowserService     │
+│ • ReplayService         │
+│ • ReplayProducer        │
 │ • KafkaAdminService     │
 └────┬────────────────┬───┘
      │                │
      ▼                ▼
 ┌──────────┐    ┌──────────┐
 │PostgreSQL│    │  Kafka   │
-│(Metadata)│    │ (Messages)│
+│ Metadata │    │ Messages │
+│ + Audit  │    │ Producer │
+│  Trail   │    │ Consumer │
 └──────────┘    └──────────┘
 ```
 
@@ -294,11 +379,14 @@ Rohith Surakattula
 
 ## Status
 
-**Phase 1 & 2 Complete** ✅
+**Phase 1, 2 & 3 Complete** ✅
 - DLQ registration and management
 - Message browsing with pagination
 - Error analytics
+- Message replay (single and bulk)
+- Complete audit trail
 
-**Phase 3 (Next)** 🚧
-- Message replay functionality
+**Phase 4 (Next)** 🚧
 - Advanced filtering and search
+- Real-time dashboard
+- Alert notifications
