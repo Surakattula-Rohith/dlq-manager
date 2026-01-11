@@ -39,8 +39,9 @@ dist/
 *.tmp
 *.temp
 
-# Claude/IDE local files
+# IDE local files
 .claude/
+.cursor/
 
 # Local documentation (not tracked in git)
 SESSION_SUMMARY.md
