@@ -1,7 +1,7 @@
 {
 	"info": {
 		"name": "DLQ Manager - Full API",
-		"description": "Complete API endpoints for DLQ Manager - Phase 1",
+		"description": "Complete API endpoints for DLQ Manager - Phases 1, 2 & 3",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -12,6 +12,11 @@
 		},
 		{
 			"key": "dlqTopicId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "replayJobId",
 			"value": "",
 			"type": "string"
 		}
@@ -412,6 +417,329 @@
 				}
 			],
 			"description": "Browse messages from DLQ topics with pagination and filtering"
+		},
+		{
+			"name": "Message Replay",
+			"item": [
+				{
+					"name": "Replay Single Message",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Save the replay job ID for later use",
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.replayJob && jsonData.replayJob.id) {",
+									"        pm.collectionVariables.set('replayJobId', jsonData.replayJob.id);",
+									"        console.log('Saved Replay Job ID:', jsonData.replayJob.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 0,\n    \"messagePartition\": 0,\n    \"initiatedBy\": \"test-user@company.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/single",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "single"]
+						},
+						"description": "Replay a single message from DLQ to source topic. Reads the message from DLQ at specified offset/partition and sends it to the source topic. Auto-saves the replay job ID."
+					}
+				},
+				{
+					"name": "Replay Message - Offset 1",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 1,\n    \"messagePartition\": 0,\n    \"initiatedBy\": \"test-user@company.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/single",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "single"]
+						},
+						"description": "Replay message at offset 1 (second message)"
+					}
+				},
+				{
+					"name": "Replay Message - Offset 2",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 2,\n    \"messagePartition\": 0,\n    \"initiatedBy\": \"test-user@company.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/single",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "single"]
+						},
+						"description": "Replay message at offset 2 (third message)"
+					}
+				},
+				{
+					"name": "Bulk Replay - 3 Messages",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Save the replay job ID for later use",
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.replayJob && jsonData.replayJob.id) {",
+									"        pm.collectionVariables.set('replayJobId', jsonData.replayJob.id);",
+									"        console.log('Saved Bulk Replay Job ID:', jsonData.replayJob.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 3, \"partition\": 0},\n        {\"offset\": 4, \"partition\": 0},\n        {\"offset\": 5, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@company.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/bulk",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "bulk"]
+						},
+						"description": "Bulk replay of multiple messages in a single operation. Replays 3 messages (offsets 3, 4, 5). Auto-saves the replay job ID."
+					}
+				},
+				{
+					"name": "Bulk Replay - 5 Messages",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 6, \"partition\": 0},\n        {\"offset\": 7, \"partition\": 0},\n        {\"offset\": 8, \"partition\": 0},\n        {\"offset\": 9, \"partition\": 0},\n        {\"offset\": 10, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@company.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/bulk",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "bulk"]
+						},
+						"description": "Bulk replay of 5 messages (offsets 6-10)"
+					}
+				},
+				{
+					"name": "Bulk Replay - 10 Messages",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 11, \"partition\": 0},\n        {\"offset\": 12, \"partition\": 0},\n        {\"offset\": 13, \"partition\": 0},\n        {\"offset\": 14, \"partition\": 0},\n        {\"offset\": 15, \"partition\": 0},\n        {\"offset\": 16, \"partition\": 0},\n        {\"offset\": 17, \"partition\": 0},\n        {\"offset\": 18, \"partition\": 0},\n        {\"offset\": 19, \"partition\": 0},\n        {\"offset\": 20, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@company.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/bulk",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "bulk"]
+						},
+						"description": "Bulk replay of 10 messages (offsets 11-20). Test with larger batch."
+					}
+				},
+				{
+					"name": "Test: Bulk Replay with Invalid Offset (Partial Failure)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 21, \"partition\": 0},\n        {\"offset\": 999999, \"partition\": 0},\n        {\"offset\": 22, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"test-user@company.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/bulk",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "bulk"]
+						},
+						"description": "Test partial failure: One invalid offset (999999) should fail, but others should succeed. Job status should be COMPLETED with succeeded=2, failed=1."
+					}
+				},
+				{
+					"name": "Test: Bulk Replay Empty Messages (Should Fail)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": []\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/bulk",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "bulk"]
+						},
+						"description": "Test validation: Empty messages array should return 400 Bad Request with error message."
+					}
+				},
+				{
+					"name": "Get Replay Job by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/jobs/{{replayJobId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "jobs", "{{replayJobId}}"]
+						},
+						"description": "Get details of a specific replay job by ID (uses saved replayJobId variable). Shows job status, success/failure counts, duration, etc."
+					}
+				},
+				{
+					"name": "Get All Replay History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/history",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "history"]
+						},
+						"description": "Get all replay jobs across all DLQ topics, ordered by creation time (newest first). Useful for viewing complete replay history."
+					}
+				},
+				{
+					"name": "Get Replay History for DLQ",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/history/dlq/{{dlqTopicId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "history", "dlq", "{{dlqTopicId}}"]
+						},
+						"description": "Get replay history for a specific DLQ topic (uses saved dlqTopicId variable). Shows all replay jobs for that DLQ."
+					}
+				},
+				{
+					"name": "Test: Invalid DLQ ID (Should Fail)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicId\": \"00000000-0000-0000-0000-000000000000\",\n    \"messageOffset\": 0,\n    \"messagePartition\": 0\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/single",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "single"]
+						},
+						"description": "Test error handling: Invalid DLQ UUID should return 400 Bad Request with error message."
+					}
+				},
+				{
+					"name": "Test: Invalid Offset (Should Fail)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 999999,\n    \"messagePartition\": 0\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/single",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "single"]
+						},
+						"description": "Test error handling: Non-existent offset should fail with 'Message not found at offset' error."
+					}
+				},
+				{
+					"name": "Test: Missing Required Fields (Should Fail)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/replay/single",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "replay", "single"]
+						},
+						"description": "Test validation: Missing required fields (messageOffset, messagePartition) should return 400 Bad Request."
+					}
+				}
+			],
+			"description": "Replay messages from DLQ to source topics and view replay history"
 		},
 		{
 			"name": "Test Scenarios",
