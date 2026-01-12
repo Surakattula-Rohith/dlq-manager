@@ -43,7 +43,7 @@ public class ReplayController {
      *   "dlqTopicId": "abc-123-uuid",
      *   "messageOffset": 42,
      *   "messagePartition": 0,
-     *   "initiatedBy": "rohith@company.com"
+     *   "initiatedBy": "admin@example.com"
      * }
      *
      * Response:
@@ -100,7 +100,7 @@ public class ReplayController {
      *     {"offset": 52, "partition": 0},
      *     {"offset": 53, "partition": 0}
      *   ],
-     *   "initiatedBy": "user@company.com"
+     *   "initiatedBy": "user@example.com"
      * }
      *
      * Response:

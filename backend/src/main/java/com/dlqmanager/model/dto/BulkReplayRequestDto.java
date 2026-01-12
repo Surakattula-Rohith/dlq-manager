@@ -25,7 +25,7 @@ import java.util.UUID;
  *     {"offset": 52, "partition": 0},
  *     {"offset": 53, "partition": 0}
  *   ],
- *   "initiatedBy": "user@company.com"
+ *   "initiatedBy": "user@example.com"
  * }
  */
 @Data

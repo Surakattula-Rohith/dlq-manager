@@ -54,7 +54,7 @@ public class ReplayRequestDto {
 
     /**
      * Optional: Who is initiating this replay
-     * Example: "rohith@company.com", "admin"
+     * Example: "admin@example.com", "admin"
      * If null, service will use default: "system"
      */
     private String initiatedBy;

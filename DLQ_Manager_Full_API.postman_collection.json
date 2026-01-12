@@ -451,7 +451,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 0,\n    \"messagePartition\": 0,\n    \"initiatedBy\": \"test-user@company.com\"\n}"
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 0,\n    \"messagePartition\": 0,\n    \"initiatedBy\": \"test-user@example.com\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/replay/single",
@@ -473,7 +473,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 1,\n    \"messagePartition\": 0,\n    \"initiatedBy\": \"test-user@company.com\"\n}"
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 1,\n    \"messagePartition\": 0,\n    \"initiatedBy\": \"test-user@example.com\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/replay/single",
@@ -495,7 +495,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 2,\n    \"messagePartition\": 0,\n    \"initiatedBy\": \"test-user@company.com\"\n}"
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 2,\n    \"messagePartition\": 0,\n    \"initiatedBy\": \"test-user@example.com\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/replay/single",
@@ -535,7 +535,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 3, \"partition\": 0},\n        {\"offset\": 4, \"partition\": 0},\n        {\"offset\": 5, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@company.com\"\n}"
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 3, \"partition\": 0},\n        {\"offset\": 4, \"partition\": 0},\n        {\"offset\": 5, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@example.com\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/replay/bulk",
@@ -557,7 +557,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 6, \"partition\": 0},\n        {\"offset\": 7, \"partition\": 0},\n        {\"offset\": 8, \"partition\": 0},\n        {\"offset\": 9, \"partition\": 0},\n        {\"offset\": 10, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@company.com\"\n}"
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 6, \"partition\": 0},\n        {\"offset\": 7, \"partition\": 0},\n        {\"offset\": 8, \"partition\": 0},\n        {\"offset\": 9, \"partition\": 0},\n        {\"offset\": 10, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@example.com\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/replay/bulk",
@@ -579,7 +579,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 11, \"partition\": 0},\n        {\"offset\": 12, \"partition\": 0},\n        {\"offset\": 13, \"partition\": 0},\n        {\"offset\": 14, \"partition\": 0},\n        {\"offset\": 15, \"partition\": 0},\n        {\"offset\": 16, \"partition\": 0},\n        {\"offset\": 17, \"partition\": 0},\n        {\"offset\": 18, \"partition\": 0},\n        {\"offset\": 19, \"partition\": 0},\n        {\"offset\": 20, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@company.com\"\n}"
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 11, \"partition\": 0},\n        {\"offset\": 12, \"partition\": 0},\n        {\"offset\": 13, \"partition\": 0},\n        {\"offset\": 14, \"partition\": 0},\n        {\"offset\": 15, \"partition\": 0},\n        {\"offset\": 16, \"partition\": 0},\n        {\"offset\": 17, \"partition\": 0},\n        {\"offset\": 18, \"partition\": 0},\n        {\"offset\": 19, \"partition\": 0},\n        {\"offset\": 20, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@example.com\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/replay/bulk",
@@ -601,7 +601,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 21, \"partition\": 0},\n        {\"offset\": 999999, \"partition\": 0},\n        {\"offset\": 22, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"test-user@company.com\"\n}"
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 21, \"partition\": 0},\n        {\"offset\": 999999, \"partition\": 0},\n        {\"offset\": 22, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"test-user@example.com\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/replay/bulk",

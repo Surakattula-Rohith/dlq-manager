@@ -46,7 +46,7 @@ public class ReplayJob {
 
     /**
      * Who initiated this replay operation
-     * Example: "rohith@company.com" or "admin" or "system"
+     * Example: "admin@example.com" or "admin" or "system"
      * For MVP: Can be hardcoded or from request header
      * For production: Should come from authentication token
      */

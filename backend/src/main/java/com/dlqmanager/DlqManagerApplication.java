@@ -9,9 +9,8 @@ import java.util.TimeZone;
 public class DlqManagerApplication {
 
 	public static void main(String[] args) {
-		// Fix timezone issue: Force JVM to use UTC before anything else loads
-		// This prevents "Asia/Calcutta" (old name) from being sent to PostgreSQL
-		// PostgreSQL only recognizes "Asia/Kolkata" (new name) or UTC
+		// Configure JVM to use UTC timezone for consistent timestamp handling
+		// Ensures compatibility with PostgreSQL which recognizes UTC universally
 		TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
 
 		SpringApplication.run(DlqManagerApplication.class, args);
