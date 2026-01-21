@@ -2,57 +2,73 @@
 
 ![Java](https://img.shields.io/badge/Java-17%2B-blue)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen)
+![React](https://img.shields.io/badge/React-18-61DAFB)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.x-06B6D4)
 ![Kafka](https://img.shields.io/badge/Apache%20Kafka-3.x-orange)
 ![License](https://img.shields.io/badge/License-AGPL--3.0-purple)
 
-A production-ready Dead Letter Queue (DLQ) management system for Apache Kafka. Browse, analyze, and replay failed messages through REST APIs.
+A production-ready Dead Letter Queue (DLQ) management system for Apache Kafka with a modern web dashboard. Browse, analyze, and replay failed messages through an intuitive UI or REST APIs.
 
 > Stop losing failed messages. Track, analyze, and replay with confidence.
 
 ## Features
 
-**DLQ Management**
-- Register and manage DLQ topics with source topic mapping
-- Auto-discover DLQ topics by naming convention (`-dlq`, `-error` suffixes)
-- Active/Paused status management
+### Backend Features
+- **DLQ Topic Management** - Register and manage DLQ topics with source topic mapping
+- **Auto-Discovery** - Detect DLQ topics by naming convention (`-dlq`, `-error` suffixes)
+- **Message Browsing** - Paginated message listing with payload, headers, and metadata
+- **Error Analytics** - Error breakdown by type with percentages and patterns
+- **Message Replay** - Single and bulk replay with audit trail and job tracking
+- **Idempotent Producer** - Safe replay with duplicate prevention
 
-**Message Browsing**
-- Browse messages with pagination (up to 100 per page)
-- View payload, headers, and metadata
-- Extract error information from Kafka headers
-
-**Error Analytics**
-- Error breakdown by type with percentages
-- Identify most common failure patterns
-- Prioritize fixes based on error frequency
-
-**Message Replay**
-- Replay single or bulk messages back to source topic
-- Complete audit trail with job tracking
-- Header cleanup (removes DLQ headers, adds replay markers)
-- Idempotent producer configuration
+### Frontend Features
+- **Dashboard** - Overview with summary cards, DLQ status table, and recent replay activity
+- **DLQ Topics Page** - List, search, add, edit, and delete DLQ topic registrations
+- **Message Browser** - Browse messages with selection, filtering, and bulk actions
+- **Message Detail Modal** - View full payload, headers, metadata with copy functionality
+- **Error Breakdown Chart** - Visual breakdown of error types with percentages
+- **Replay History** - Track all replay jobs with status, success rate, and timestamps
+- **Settings** - Kafka cluster connection status and configuration
+- **Responsive Design** - Clean, modern UI built with Tailwind CSS
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Backend | Java 17, Spring Boot 3.x, Spring Data JPA |
-| Database | PostgreSQL 15 |
-| Messaging | Apache Kafka 3.x |
-| Infrastructure | Docker Compose |
+### Frontend
+| Technology | Purpose |
+|------------|---------|
+| React 18 | UI Framework |
+| TypeScript | Type Safety |
+| Vite | Build Tool & Dev Server |
+| Tailwind CSS 4 | Styling |
+| React Router 6 | Client-side Routing |
+| TanStack Query | Server State Management |
+| Axios | HTTP Client |
+| Lucide React | Icons |
+| Recharts | Charts (for analytics) |
+
+### Backend
+| Technology | Purpose |
+|------------|---------|
+| Java 17 | Runtime |
+| Spring Boot 3.x | Framework |
+| Spring Data JPA | Database ORM |
+| Spring Kafka | Kafka Integration |
+| PostgreSQL 15 | Metadata & Audit Storage |
+| Apache Kafka 3.x | Message Queue |
 
 ## Quick Start
 
 ### Prerequisites
 - Docker & Docker Compose
 - Java 17+
+- Node.js 18+
 - Maven
 
 ### 1. Start Infrastructure
 ```bash
 docker-compose up -d
 ```
-
 This starts Kafka (localhost:9092), Zookeeper (localhost:2181), and PostgreSQL (localhost:5432).
 
 ### 2. Run Backend
@@ -60,10 +76,17 @@ This starts Kafka (localhost:9092), Zookeeper (localhost:2181), and PostgreSQL (
 cd backend
 ./mvnw spring-boot:run
 ```
-
 API available at: `http://localhost:8080`
 
-### 3. Create Test DLQ Topic
+### 3. Run Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Dashboard available at: `http://localhost:5173`
+
+### 4. Create Test DLQ Topic
 ```bash
 docker exec -it dlq-kafka kafka-topics --create \
   --topic orders-dlq \
@@ -72,8 +95,100 @@ docker exec -it dlq-kafka kafka-topics --create \
   --replication-factor 1
 ```
 
-### 4. Test with Postman
-Import `DLQ_Manager_Full_API.postman_collection.json` into Postman.
+## Frontend Pages
+
+### Dashboard (`/`)
+- Summary cards showing total DLQ topics, replays, success rate, and alerts
+- DLQ topics table with status indicators
+- Recent replay jobs list
+- Quick navigation to topic details
+
+### DLQ Topics (`/dlq-topics`)
+- Searchable list of all registered DLQ topics
+- Add new DLQ topic with modal form
+- Edit existing topic configuration
+- Delete topics with confirmation
+- Status badges (Active/Paused, Auto/Manual detection)
+
+### Topic Detail (`/dlq-topics/:id`)
+- Error breakdown visualization with progress bars
+- Paginated message table with selection checkboxes
+- Bulk replay selected messages
+- Message detail modal with:
+  - Metadata (offset, partition, key, timestamp)
+  - Error information with exception class
+  - Full headers view (JSON formatted)
+  - Full payload view (JSON formatted)
+  - Copy to clipboard functionality
+  - Single message replay button
+
+### Replay History (`/replay-history`)
+- List of all replay jobs with filtering
+- Status indicators (Completed, Failed, In Progress, Partial)
+- Success rate progress bars
+- Job details including message counts and timestamps
+
+### Settings (`/settings`)
+- Kafka cluster connection status
+- Controller node information
+- Cluster nodes list
+- All Kafka topics with partition counts
+- API configuration
+
+## Frontend Structure
+
+```
+frontend/
+├── src/
+│   ├── api/                    # API layer
+│   │   ├── client.ts           # Axios instance with interceptors
+│   │   ├── dlqTopics.ts        # DLQ topics endpoints
+│   │   ├── replay.ts           # Replay endpoints
+│   │   └── kafka.ts            # Kafka admin endpoints
+│   ├── components/
+│   │   └── layout/
+│   │       ├── Sidebar.tsx     # Navigation sidebar
+│   │       ├── Header.tsx      # Page header with refresh
+│   │       └── Layout.tsx      # Main layout wrapper
+│   ├── pages/
+│   │   ├── DashboardPage.tsx   # Home dashboard
+│   │   ├── DlqTopicsPage.tsx   # Topics list & management
+│   │   ├── DlqTopicDetailPage.tsx  # Message browser
+│   │   ├── ReplayHistoryPage.tsx   # Replay jobs list
+│   │   ├── AlertsPage.tsx      # Alerts (Phase 4)
+│   │   └── SettingsPage.tsx    # Configuration
+│   ├── types/
+│   │   └── index.ts            # TypeScript interfaces
+│   ├── App.tsx                 # Router setup
+│   └── main.tsx                # Entry point
+├── tailwind.config.js
+├── vite.config.ts              # Vite config with API proxy
+└── package.json
+```
+
+## Backend Structure
+
+```
+backend/
+└── src/main/java/com/dlqmanager/
+    ├── controller/
+    │   ├── DlqTopicController.java   # DLQ CRUD endpoints
+    │   ├── ReplayController.java     # Replay endpoints
+    │   └── KafkaController.java      # Kafka admin endpoints
+    ├── service/
+    │   ├── DlqBrowserService.java    # Message browsing logic
+    │   ├── ReplayService.java        # Replay orchestration
+    │   └── KafkaAdminService.java    # Kafka admin operations
+    ├── repository/
+    │   ├── DlqTopicRepository.java
+    │   └── ReplayJobRepository.java
+    ├── model/
+    │   ├── entity/                   # JPA entities
+    │   ├── dto/                      # Request/Response DTOs
+    │   └── enums/
+    └── config/
+        └── KafkaProducerConfig.java  # Idempotent producer
+```
 
 ## API Reference
 
@@ -180,41 +295,73 @@ Response:
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    REST API Layer                        │
-│  DlqTopicController · ReplayController · KafkaController │
-└────────────────────────┬────────────────────────────────┘
-                         │
-┌────────────────────────┴────────────────────────────────┐
-│                    Service Layer                         │
-│  DlqBrowserService · ReplayService · KafkaAdminService  │
-└──────────┬─────────────────────────────────┬────────────┘
-           │                                 │
-           ▼                                 ▼
-    ┌────────────┐                    ┌────────────┐
-    │ PostgreSQL │                    │   Kafka    │
-    │  Metadata  │                    │  Messages  │
-    │   Audit    │                    │  Produce   │
-    │   Trail    │                    │  Consume   │
-    └────────────┘                    └────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        FRONTEND                                  │
+│  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐       │
+│  │ Dashboard │ │DLQ Topics │ │  Message  │ │  Replay   │       │
+│  │   Page    │ │   Page    │ │  Browser  │ │  History  │       │
+│  └───────────┘ └───────────┘ └───────────┘ └───────────┘       │
+│         │            │             │             │               │
+│  ┌──────┴────────────┴─────────────┴─────────────┴──────┐      │
+│  │              TanStack Query + Axios                   │      │
+│  └──────────────────────────┬────────────────────────────┘      │
+└─────────────────────────────┼───────────────────────────────────┘
+                              │ HTTP/REST
+┌─────────────────────────────┼───────────────────────────────────┐
+│                        BACKEND                                   │
+│  ┌──────────────────────────┴────────────────────────────┐      │
+│  │                    REST API Layer                      │      │
+│  │  DlqTopicController · ReplayController · KafkaController     │
+│  └──────────────────────────┬────────────────────────────┘      │
+│                              │                                   │
+│  ┌──────────────────────────┴────────────────────────────┐      │
+│  │                    Service Layer                       │      │
+│  │  DlqBrowserService · ReplayService · KafkaAdminService │      │
+│  └────────────┬─────────────────────────────┬────────────┘      │
+│               │                             │                    │
+│               ▼                             ▼                    │
+│        ┌────────────┐                ┌────────────┐             │
+│        │ PostgreSQL │                │   Kafka    │             │
+│        │  Metadata  │                │  Messages  │             │
+│        │   Audit    │                │  Produce   │             │
+│        │   Trail    │                │  Consume   │             │
+│        └────────────┘                └────────────┘             │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## Project Structure
+## Development
 
+### Frontend Development
+```bash
+cd frontend
+npm install          # Install dependencies
+npm run dev          # Start dev server (http://localhost:5173)
+npm run build        # Production build
+npm run preview      # Preview production build
 ```
-dlq-manager/
-├── backend/
-│   └── src/main/java/com/dlqmanager/
-│       ├── controller/     # REST endpoints
-│       ├── service/        # Business logic
-│       ├── repository/     # Data access
-│       ├── model/
-│       │   ├── entity/     # JPA entities
-│       │   ├── dto/        # Request/Response objects
-│       │   └── enums/
-│       └── config/         # Kafka producer config
-├── docker-compose.yml
-└── DLQ_Manager_Full_API.postman_collection.json
+
+### Backend Development
+```bash
+cd backend
+./mvnw spring-boot:run              # Start server
+./mvnw test                         # Run tests
+./mvnw package -DskipTests          # Build JAR
+```
+
+### Environment Variables
+
+**Frontend** (`.env` or `vite.config.ts`):
+```
+VITE_API_URL=http://localhost:8080   # Backend URL (optional, uses proxy in dev)
+```
+
+**Backend** (`application.yml`):
+```yaml
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+  datasource:
+    url: jdbc:postgresql://localhost:5432/dlqmanager
 ```
 
 ## Message Header Format
@@ -230,6 +377,14 @@ X-Exception-Class: Java exception class
 X-Failed-Timestamp: Epoch milliseconds
 ```
 
+## Roadmap
+
+- [x] Phase 1: DLQ Topic Management
+- [x] Phase 2: Message Browsing & Error Analytics
+- [x] Phase 3: Message Replay
+- [x] Phase 4: Frontend Dashboard
+- [ ] Phase 5: Alerting & Notifications
+
 ## Contributing
 
 Contributions welcome. Fork the repo, create a branch, and submit a PR.
@@ -240,5 +395,5 @@ AGPL-3.0 — See [LICENSE](LICENSE) for details.
 
 ## Author
 
-**Rohith Surakattula**  
+**Rohith Surakattula**
 [GitHub](https://github.com/Surakattula-Rohith) · [LinkedIn](https://www.linkedin.com/in/surakattula-rohith-511315264/)
