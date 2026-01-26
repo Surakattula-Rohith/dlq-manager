@@ -8,29 +8,80 @@
 ![Kafka](https://img.shields.io/badge/Apache%20Kafka-3.x-orange)
 ![License](https://img.shields.io/badge/License-AGPL--3.0-purple)
 
-A production-ready Dead Letter Queue (DLQ) management system for Apache Kafka with a modern web dashboard. Browse, analyze, and replay failed messages through an intuitive UI or REST APIs.
+A web-based Dead Letter Queue (DLQ) management dashboard for Apache Kafka. Browse failed messages, analyze error patterns, and replay messages back to source topics.
 
 > Stop losing failed messages. Track, analyze, and replay with confidence.
 
+## What is this?
+
+When Kafka consumers fail to process messages, those messages often end up in a Dead Letter Queue (DLQ). This tool helps you:
+
+- **See** what's in your DLQ topics
+- **Understand** why messages failed (error breakdown)
+- **Fix** issues by replaying messages back to the source topic
+- **Track** all replay operations with an audit trail
+
+## Screenshots
+
+### Dashboard
+Overview of all DLQ topics, summary stats, and recent replay activity.
+
+![Dashboard](assets/01-dashboard.png)
+
+### DLQ Topics Management
+List, search, add, edit, and delete DLQ topic registrations.
+
+![DLQ Topics List](assets/02-dlq-topics-list.png)
+
+![Add DLQ Topic](assets/09-add-topic-modal.png)
+
+### Message Browser & Error Analytics
+Browse messages in a DLQ topic with error breakdown visualization.
+
+![Topic Detail with Error Breakdown](assets/04-topic-detail-error-breakdown.png)
+
+### Message Details
+View full message payload, headers, metadata, and replay individual messages.
+
+![Message Detail Modal](assets/05-message-detail-modal.png)
+
+### Replay History
+Track all replay operations with status, success rates, and timestamps.
+
+![Replay History](assets/06-replay-history.png)
+
+### Settings
+View Kafka cluster connection status and all topics.
+
+![Settings](assets/08-settings-kafka-connection.png)
+
+### Alerts (Coming Soon)
+Phase 5 will add threshold alerts, Slack, and email notifications.
+
+![Alerts Coming Soon](assets/07-alerts-coming-soon.png)
+
+---
+
 ## Features
 
-### Backend Features
-- **DLQ Topic Management** - Register and manage DLQ topics with source topic mapping
-- **Auto-Discovery** - Detect DLQ topics by naming convention (`-dlq`, `-error` suffixes)
-- **Message Browsing** - Paginated message listing with payload, headers, and metadata
-- **Error Analytics** - Error breakdown by type with percentages and patterns
-- **Message Replay** - Single and bulk replay with audit trail and job tracking
-- **Idempotent Producer** - Safe replay with duplicate prevention
+### Core Features
+| Feature | Description |
+|---------|-------------|
+| **DLQ Topic Management** | Register DLQ topics and map them to source topics |
+| **Message Browser** | Paginated view of messages with payload, headers, and metadata |
+| **Error Analytics** | See which errors are most common (with percentages) |
+| **Message Replay** | Replay single or bulk messages back to source topic |
+| **Replay History** | Full audit trail of all replay operations |
+| **Auto-Discovery** | Detect DLQ topics by naming convention (`*-dlq`, `*-error`) |
 
-### Frontend Features
-- **Dashboard** - Overview with summary cards, DLQ status table, and recent replay activity
-- **DLQ Topics Page** - List, search, add, edit, and delete DLQ topic registrations
-- **Message Browser** - Browse messages with selection, filtering, and bulk actions
-- **Message Detail Modal** - View full payload, headers, metadata with copy functionality
-- **Error Breakdown Chart** - Visual breakdown of error types with percentages
-- **Replay History** - Track all replay jobs with status, success rate, and timestamps
-- **Settings** - Kafka cluster connection status and configuration
-- **Responsive Design** - Clean, modern UI built with Tailwind CSS
+### UI Features
+| Page | What you can do |
+|------|-----------------|
+| **Dashboard** | Overview cards, topic list, recent replays |
+| **DLQ Topics** | Add, edit, delete, search topics |
+| **Topic Detail** | Browse messages, see error breakdown, select & replay |
+| **Replay History** | View all jobs with success rates and timestamps |
+| **Settings** | See Kafka cluster status and connection info |
 
 ## Tech Stack
 
@@ -57,43 +108,92 @@ A production-ready Dead Letter Queue (DLQ) management system for Apache Kafka wi
 | PostgreSQL 15 | Metadata & Audit Storage |
 | Apache Kafka 3.x | Message Queue |
 
-## Quick Start
+## Quick Start (Demo Mode)
+
+This will start the app with a **demo Kafka cluster** running locally in Docker.
 
 ### Prerequisites
 - Docker & Docker Compose
 - Java 17+
 - Node.js 18+
-- Maven
 
-### 1. Start Infrastructure
+### Step 1: Clone and Start Infrastructure
 ```bash
+git clone https://github.com/Surakattula-Rohith/dlq-manager.git
+cd dlq-manager
+
+# Start Kafka, Zookeeper, and PostgreSQL
 docker-compose up -d
 ```
-This starts Kafka (localhost:9092), Zookeeper (localhost:2181), and PostgreSQL (localhost:5432).
 
-### 2. Run Backend
+### Step 2: Start Backend
 ```bash
 cd backend
 ./mvnw spring-boot:run
 ```
-API available at: `http://localhost:8080`
+Backend runs at: `http://localhost:8080`
 
-### 3. Run Frontend
+### Step 3: Start Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Dashboard available at: `http://localhost:5173`
+Open: `http://localhost:5173`
 
-### 4. Create Test DLQ Topic
+### Step 4: Add Test Data (Optional)
 ```bash
-docker exec -it dlq-kafka kafka-topics --create \
+# Create a test DLQ topic
+docker exec dlq-kafka kafka-topics --create \
   --topic orders-dlq \
   --bootstrap-server localhost:9092 \
-  --partitions 1 \
-  --replication-factor 1
+  --partitions 1
+
+# Create the source topic
+docker exec dlq-kafka kafka-topics --create \
+  --topic orders \
+  --bootstrap-server localhost:9092 \
+  --partitions 1
+
+# Generate 50 test messages with different error types
+cd backend
+mvn exec:java -Dexec.mainClass="com.dlqmanager.util.TestDataProducer" -q
 ```
+
+---
+
+## Connect to Your Own Kafka
+
+> **Note:** Currently, Kafka configuration requires editing config files. A UI-based setup is planned for a future release.
+
+### Option 1: Environment Variables
+```bash
+# Set before starting the backend
+export SPRING_KAFKA_BOOTSTRAP_SERVERS=your-kafka-host:9092
+
+cd backend
+./mvnw spring-boot:run
+```
+
+### Option 2: Edit Configuration File
+Edit `backend/src/main/resources/application.yml`:
+```yaml
+spring:
+  kafka:
+    bootstrap-servers: your-kafka-host:9092
+```
+
+### Option 3: Docker Compose Override
+Create `docker-compose.override.yml`:
+```yaml
+services:
+  # Comment out or remove the kafka and zookeeper services
+  # if using external Kafka
+```
+
+Then set the backend to connect to your Kafka cluster.
+
+---
 
 ## Frontend Pages
 
@@ -377,13 +477,33 @@ X-Exception-Class: Java exception class
 X-Failed-Timestamp: Epoch milliseconds
 ```
 
+## Current Limitations
+
+This is a work-in-progress project. Here's what's **not yet implemented**:
+
+| Limitation | Status |
+|------------|--------|
+| Kafka cluster is hardcoded (no UI to configure) | Planned |
+| No authentication/login | Planned |
+| No alerting when DLQ fills up | Phase 5 |
+| No Slack/Email notifications | Phase 5 |
+| Single cluster only (no multi-cluster) | Planned |
+
+See [TODO.md](TODO.md) for the full list of planned improvements.
+
+---
+
 ## Roadmap
 
-- [x] Phase 1: DLQ Topic Management
-- [x] Phase 2: Message Browsing & Error Analytics
-- [x] Phase 3: Message Replay
-- [x] Phase 4: Frontend Dashboard
-- [ ] Phase 5: Alerting & Notifications
+- [x] **Phase 1:** DLQ Topic Management (CRUD operations)
+- [x] **Phase 2:** Message Browsing & Error Analytics
+- [x] **Phase 3:** Message Replay (single & bulk)
+- [x] **Phase 4:** Frontend Dashboard (React + Tailwind)
+- [ ] **Phase 5:** Alerting & Notifications (Slack, Email, PagerDuty)
+- [ ] **Phase 6:** Dynamic Kafka Configuration (UI-based setup)
+- [ ] **Phase 7:** Authentication & Multi-tenancy
+
+---
 
 ## Contributing
 

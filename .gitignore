@@ -39,14 +39,7 @@ dist/
 *.tmp
 *.temp
 
-# IDE local files
-.claude/
-.cursor/
-
-# Local documentation (not tracked in git)
-SESSION_SUMMARY.md
-SESSION_SUMMARY_Dec30.md
-SESSION_SUMMARY_Jan04.md
+# Local documentation
 PROJECT_SPEC.md
 kafka-setup-commands.txt
 
