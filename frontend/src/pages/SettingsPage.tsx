@@ -51,43 +51,32 @@ export function SettingsPage() {
           {loadingCluster ? (
             <div className="text-gray-500">Loading cluster info...</div>
           ) : isConnected && clusterInfo ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Controller Node */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Cluster ID */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Server className="w-5 h-5 text-gray-500" />
-                  <h4 className="font-medium text-gray-900">Controller Node</h4>
+                  <h4 className="font-medium text-gray-900">Cluster ID</h4>
                 </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">ID:</span>
-                    <span className="font-mono">{clusterInfo.controller.id}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Host:</span>
-                    <span className="font-mono">{clusterInfo.controller.host}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Port:</span>
-                    <span className="font-mono">{clusterInfo.controller.port}</span>
-                  </div>
-                </div>
+                <p className="font-mono text-sm text-gray-700 break-all">{clusterInfo.clusterId}</p>
               </div>
 
-              {/* Cluster Nodes */}
+              {/* Broker Count */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Database className="w-5 h-5 text-gray-500" />
-                  <h4 className="font-medium text-gray-900">Cluster Nodes ({clusterInfo.nodes.length})</h4>
+                  <h4 className="font-medium text-gray-900">Brokers</h4>
                 </div>
-                <div className="space-y-2">
-                  {clusterInfo.nodes.map((node) => (
-                    <div key={node.id} className="flex items-center justify-between text-sm bg-white rounded px-3 py-2">
-                      <span className="text-gray-700">Node {node.id}</span>
-                      <span className="font-mono text-gray-500">{node.host}:{node.port}</span>
-                    </div>
-                  ))}
+                <p className="text-2xl font-bold text-gray-900">{clusterInfo.brokerCount}</p>
+              </div>
+
+              {/* Topic Count */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Database className="w-5 h-5 text-gray-500" />
+                  <h4 className="font-medium text-gray-900">Topics</h4>
                 </div>
+                <p className="text-2xl font-bold text-gray-900">{clusterInfo.topicCount}</p>
               </div>
             </div>
           ) : (
@@ -112,14 +101,12 @@ export function SettingsPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Topic Name</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Partitions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {topics.map((topic) => (
                     <tr key={topic.name} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-mono text-sm">{topic.name}</td>
-                      <td className="px-4 py-3 text-gray-500">{topic.partitions}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -17,12 +17,12 @@ export const replayApi = {
   // Get replay job status
   getJob: async (jobId: string): Promise<ReplayJob> => {
     const response = await apiClient.get(`/api/replay/jobs/${jobId}`);
-    return response.data;
+    return response.data.replayJob;
   },
 
   // Get replay history
   getHistory: async (): Promise<ReplayJob[]> => {
     const response = await apiClient.get('/api/replay/history');
-    return response.data;
+    return response.data.replayJobs;
   },
 };
