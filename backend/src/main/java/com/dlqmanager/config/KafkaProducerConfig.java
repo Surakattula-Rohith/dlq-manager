@@ -1,11 +1,12 @@
 package com.dlqmanager.config;
 
+import com.dlqmanager.service.KafkaConfigService;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 
 import java.util.Properties;
 
@@ -25,15 +26,11 @@ import java.util.Properties;
 @Configuration
 public class KafkaProducerConfig {
 
-    /**
-     * Kafka broker address from application.properties
-     * Example: "localhost:9092"
-     *
-     * @Value annotation: Spring injects value from properties file
-     * Property key: spring.kafka.bootstrap-servers
-     */
-    @Value("${spring.kafka.bootstrap-servers}")
-    private String bootstrapServers;
+    private final KafkaConfigService kafkaConfigService;
+
+    public KafkaProducerConfig(@Lazy KafkaConfigService kafkaConfigService) {
+        this.kafkaConfigService = kafkaConfigService;
+    }
 
     /**
      * Creates a KafkaProducer bean for sending messages
@@ -56,7 +53,7 @@ public class KafkaProducerConfig {
          * Example: "localhost:9092" or "broker1:9092,broker2:9092"
          * Producer will connect to these addresses
          */
-        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConfigService.getBootstrapServers());
 
         /*
          * KEY_SERIALIZER_CLASS_CONFIG: How to convert key to bytes

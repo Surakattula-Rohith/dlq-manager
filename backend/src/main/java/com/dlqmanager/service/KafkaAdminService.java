@@ -3,12 +3,16 @@ package com.dlqmanager.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.ListTopicsOptions;
 import org.apache.kafka.clients.admin.TopicListing;
-import org.springframework.kafka.core.KafkaAdmin;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
@@ -21,7 +25,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class KafkaAdminService {
 
-    private final KafkaAdmin kafkaAdmin;
+    private final KafkaConfigService kafkaConfigService;
 
     /**
      * List all Kafka topics in the cluster
@@ -32,7 +36,7 @@ public class KafkaAdminService {
     public List<String> listAllTopics() {
         log.debug("Fetching all Kafka topics...");
 
-        try (AdminClient adminClient = AdminClient.create(kafkaAdmin.getConfigurationProperties())) {
+        try (AdminClient adminClient = createAdminClient()) {
             // List all topics (including internal topics)
             Collection<TopicListing> topicListings = adminClient.listTopics(
                 new ListTopicsOptions().listInternal(false)
@@ -61,7 +65,7 @@ public class KafkaAdminService {
     public boolean topicExists(String topicName) {
         log.debug("Checking if topic exists: {}", topicName);
 
-        try (AdminClient adminClient = AdminClient.create(kafkaAdmin.getConfigurationProperties())) {
+        try (AdminClient adminClient = createAdminClient()) {
             Set<String> existingTopics = adminClient.listTopics().names().get();
             boolean exists = existingTopics.contains(topicName);
 
@@ -121,7 +125,7 @@ public class KafkaAdminService {
     public Map<String, Object> getClusterInfo() {
         log.debug("Fetching Kafka cluster information...");
 
-        try (AdminClient adminClient = AdminClient.create(kafkaAdmin.getConfigurationProperties())) {
+        try (AdminClient adminClient = createAdminClient()) {
             Map<String, Object> clusterInfo = new HashMap<>();
 
             // Get cluster ID
@@ -143,5 +147,11 @@ public class KafkaAdminService {
             log.error("Failed to get cluster information", e);
             throw new RuntimeException("Failed to get cluster info: " + e.getMessage(), e);
         }
+    }
+
+    private AdminClient createAdminClient() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConfigService.getBootstrapServers());
+        return AdminClient.create(props);
     }
 }

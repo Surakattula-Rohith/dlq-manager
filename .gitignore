@@ -42,4 +42,13 @@ dist/
 # Local documentation
 PROJECT_SPEC.md
 kafka-setup-commands.txt
+commit_messages.txt
 
+# Tool config
+.claude/
+
+# Analytics / personal files
+analytics/
+
+# Node
+frontend/node_modules/

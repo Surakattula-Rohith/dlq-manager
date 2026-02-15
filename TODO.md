@@ -1,27 +1,42 @@
-# DLQ Manager - TODO
-
-## Current Limitations
-
-### Kafka Configuration (High Priority)
-- [ ] **Kafka cluster is hardcoded** - Users must edit config files to connect to their own Kafka
-- [ ] No UI to configure Kafka bootstrap servers
-- [ ] No connection test before saving
-- [ ] No first-time setup wizard for new users
-
-### User Experience
-- [ ] No authentication or user management
-- [ ] No role-based access control
-- [ ] Cannot switch between multiple Kafka clusters
-- [ ] No connection profiles (dev/staging/prod)
+# DLQ Manager — Backlog & Roadmap
 
 ---
 
-## Phase 5: Alerting & Notifications (Not Started)
+## v1.0 — Core Platform (Completed)
+
+| Feature | Status |
+|---------|--------|
+| DLQ Topic Management (CRUD) | Done |
+| Message Browsing with pagination | Done |
+| Error Analytics & breakdown | Done |
+| Single & Bulk Message Replay | Done |
+| Replay History & audit trail | Done |
+| Auto-Discovery of DLQ topics | Done |
+| React + Tailwind Frontend | Done |
+| Dashboard with overview cards | Done |
+
+---
+
+## v2.0 — Dynamic Kafka Configuration (Completed)
+
+| Feature | Status |
+|---------|--------|
+| Settings page to configure bootstrap servers | Done |
+| Connection test button (must pass before save) | Done |
+| Save disabled until test succeeds | Done |
+| Configuration stored in PostgreSQL | Done |
+| Hot reload — no backend restart needed | Done |
+| Fallback to `application.properties` if no DB config | Done |
+| First-time setup banner for new users | Done |
+
+---
+
+## v3.0 — Alerting & Notifications (Planned)
 
 ### Alert Rules
 - [ ] Create alert rules for DLQ topics
 - [ ] Threshold-based alerts (e.g., "Alert when messages > 100")
-- [ ] Time-window based alerts (e.g., "Alert when 50+ messages in 5 minutes")
+- [ ] Time-window alerts (e.g., "50+ messages in 5 minutes")
 - [ ] Alert rule enable/disable toggle
 
 ### Notification Channels
@@ -32,20 +47,29 @@
 
 ### Alert Management
 - [ ] Alert history/log
-- [ ] Acknowledge alerts
-- [ ] Snooze alerts
+- [ ] Acknowledge & snooze alerts
 - [ ] Alert escalation
 
 ---
 
-## Future Enhancements
+## v4.0 — Authentication & RBAC (Planned)
 
-### Kafka Configuration UI
-- [ ] Settings page to enter Kafka bootstrap servers
-- [ ] Support for SASL/SSL authentication
-- [ ] Connection test button
-- [ ] Save configuration to database (not just config files)
+- [ ] User authentication (username/password or OAuth)
+- [ ] Role-based access control (Admin, Viewer, Operator)
+- [ ] Audit log for all user actions
+- [ ] API key authentication for programmatic access
+
+---
+
+## v5.0 — Multi-Cluster & Advanced Kafka (Planned)
+
 - [ ] Multi-cluster support with cluster switching
+- [ ] Connection profiles (dev/staging/prod)
+- [ ] SASL/SSL authentication support
+
+---
+
+## Future Enhancements
 
 ### Message Management
 - [ ] Search messages by key, payload content, or headers
@@ -69,12 +93,6 @@
 - [ ] Real-time message count updates
 - [ ] Kafka consumer lag monitoring
 
-### Security
-- [ ] User authentication (username/password or OAuth)
-- [ ] Role-based access control (Admin, Viewer, Operator)
-- [ ] Audit log for all actions
-- [ ] API key authentication for programmatic access
-
 ### Deployment
 - [ ] Single Docker image with frontend + backend
 - [ ] Kubernetes Helm chart
@@ -93,13 +111,14 @@
 
 ## Known Issues
 
-- [ ] Error breakdown shows "Unknown Error" for messages without X-Error-Message header
-- [ ] Pagination starts from offset 0, may miss messages if topic has retention policy
-- [ ] No handling for Kafka connection failures in UI (just shows loading)
+| Issue | Priority |
+|-------|----------|
+| Error breakdown shows "Unknown Error" for messages without `X-Error-Message` header | Low |
+| Pagination starts from offset 0, may miss messages with retention policy | Low |
 
 ---
 
-## Quick Wins (Easy to Implement)
+## Quick Wins
 
 - [ ] Add "Copy Topic Name" button
 - [ ] Add message count badge on topic cards

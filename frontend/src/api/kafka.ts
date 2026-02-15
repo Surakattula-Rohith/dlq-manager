@@ -15,6 +15,19 @@ export interface DiscoveredDlq {
   sourceTopic: string;
 }
 
+export interface KafkaConfigResponse {
+  success: boolean;
+  bootstrapServers: string;
+  configured: boolean;
+}
+
+export interface ConnectionTestResult {
+  success: boolean;
+  clusterId?: string;
+  brokerCount?: number;
+  error?: string;
+}
+
 export const kafkaApi = {
   // Get all Kafka topics
   getTopics: async (): Promise<KafkaTopic[]> => {
@@ -39,5 +52,23 @@ export const kafkaApi = {
       dlqTopic,
       sourceTopic: sourceTopic as string,
     }));
+  },
+
+  // Get Kafka config
+  getConfig: async (): Promise<KafkaConfigResponse> => {
+    const response = await apiClient.get('/api/kafka/config');
+    return response.data;
+  },
+
+  // Save Kafka config
+  saveConfig: async (bootstrapServers: string): Promise<KafkaConfigResponse> => {
+    const response = await apiClient.put('/api/kafka/config', { bootstrapServers });
+    return response.data;
+  },
+
+  // Test Kafka connection
+  testConnection: async (bootstrapServers: string): Promise<ConnectionTestResult> => {
+    const response = await apiClient.post('/api/kafka/config/test', { bootstrapServers });
+    return response.data;
   },
 };

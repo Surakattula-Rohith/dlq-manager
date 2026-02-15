@@ -9,12 +9,10 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * DLQ Browser Service
@@ -38,14 +36,14 @@ import java.util.stream.Collectors;
 public class DlqBrowserService {
 
     private final DlqTopicRepository dlqTopicRepository;
-    private final String bootstrapServers;
+    private final KafkaConfigService kafkaConfigService;
 
     public DlqBrowserService(
             DlqTopicRepository dlqTopicRepository,
-            @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers
+            KafkaConfigService kafkaConfigService
     ) {
         this.dlqTopicRepository = dlqTopicRepository;
-        this.bootstrapServers = bootstrapServers;
+        this.kafkaConfigService = kafkaConfigService;
     }
 
     /**
@@ -307,7 +305,7 @@ public class DlqBrowserService {
      */
     private KafkaConsumer<String, String> createConsumer() {
         Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConfigService.getBootstrapServers());
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "dlq-manager-browser-" + UUID.randomUUID());
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");

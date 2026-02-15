@@ -19,7 +19,6 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,20 +52,20 @@ public class ReplayService {
     private final ReplayJobRepository replayJobRepository;
     private final ReplayMessageRepository replayMessageRepository;
     private final ReplayProducer replayProducer;
-    private final String bootstrapServers;
+    private final KafkaConfigService kafkaConfigService;
 
     public ReplayService(
             DlqTopicRepository dlqTopicRepository,
             ReplayJobRepository replayJobRepository,
             ReplayMessageRepository replayMessageRepository,
             ReplayProducer replayProducer,
-            @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers
+            KafkaConfigService kafkaConfigService
     ) {
         this.dlqTopicRepository = dlqTopicRepository;
         this.replayJobRepository = replayJobRepository;
         this.replayMessageRepository = replayMessageRepository;
         this.replayProducer = replayProducer;
-        this.bootstrapServers = bootstrapServers;
+        this.kafkaConfigService = kafkaConfigService;
     }
 
     /**
@@ -408,7 +407,7 @@ public class ReplayService {
      */
     private KafkaConsumer<String, String> createConsumer() {
         Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConfigService.getBootstrapServers());
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "dlq-manager-replay-" + UUID.randomUUID());
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
