@@ -9,6 +9,8 @@ import {
   AlertsPage,
   SettingsPage,
 } from './pages';
+import { ThemeContext } from './context/ThemeContext';
+import { useDarkMode } from './hooks/useDarkMode';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,7 +23,10 @@ const queryClient = new QueryClient({
 });
 
 function App() {
+  const { isDark, toggle } = useDarkMode();
+
   return (
+    <ThemeContext.Provider value={{ isDark, toggleDark: toggle }}>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
@@ -36,6 +41,7 @@ function App() {
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
+    </ThemeContext.Provider>
   );
 }
 
