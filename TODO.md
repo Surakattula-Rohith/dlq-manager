@@ -120,11 +120,13 @@
 
 ## Quick Wins
 
+- [ ] Show descriptive error messages from API responses instead of raw HTTP status codes (e.g. "Error 400") — affects Add/Edit DLQ Topic modal, Settings, and other forms
+- [ ] In production, serve frontend and backend behind a reverse proxy (Nginx/Caddy/ALB) so the API is reachable at `/api` with no ports in the URL — set `VITE_API_URL=/api` at build time
 - [ ] Add "Copy Topic Name" button
 - [ ] Add message count badge on topic cards
 - [ ] Show last message timestamp on topic list
 - [ ] Add keyboard shortcuts (R for refresh, etc.)
-- [ ] Dark mode toggle
+- [x] Dark mode toggle
 - [ ] Remember last visited page
 
 ---

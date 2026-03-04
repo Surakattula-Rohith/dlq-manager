@@ -27,15 +27,15 @@ export function ReplayHistoryPage() {
   const getStatusStyle = (status: string) => {
     switch (status) {
       case 'COMPLETED':
-        return 'bg-green-100 text-green-700';
+        return 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300';
       case 'FAILED':
-        return 'bg-red-100 text-red-700';
+        return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
       case 'IN_PROGRESS':
-        return 'bg-blue-100 text-blue-700';
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
       case 'PARTIALLY_COMPLETED':
-        return 'bg-yellow-100 text-yellow-700';
+        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300';
       default:
-        return 'bg-gray-100 text-gray-700';
+        return 'bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300';
     }
   };
 
@@ -54,46 +54,46 @@ export function ReplayHistoryPage() {
           <StatCard
             label="Total Jobs"
             value={replayJobs?.length || 0}
-            color="text-gray-900"
+            color="text-gray-900 dark:text-white"
           />
           <StatCard
             label="Completed"
             value={replayJobs?.filter(j => j.status === 'COMPLETED').length || 0}
-            color="text-green-600"
+            color="text-green-600 dark:text-green-400"
           />
           <StatCard
             label="Failed"
             value={replayJobs?.filter(j => j.status === 'FAILED').length || 0}
-            color="text-red-600"
+            color="text-red-600 dark:text-red-400"
           />
           <StatCard
             label="In Progress"
             value={replayJobs?.filter(j => j.status === 'IN_PROGRESS').length || 0}
-            color="text-blue-600"
+            color="text-blue-600 dark:text-blue-400"
           />
         </div>
 
         {/* Jobs Table */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="overflow-x-auto">
             {isLoading ? (
-              <div className="p-8 text-center text-gray-500">Loading...</div>
+              <div className="p-8 text-center text-gray-500 dark:text-gray-400">Loading...</div>
             ) : replayJobs && replayJobs.length > 0 ? (
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DLQ Topic</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Messages</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Success Rate</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Initiated By</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Job ID</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">DLQ Topic</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Messages</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Success Rate</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Initiated By</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {replayJobs.map((job) => (
-                    <tr key={job.id} className="hover:bg-gray-50">
+                    <tr key={job.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           {getStatusIcon(job.status)}
@@ -103,27 +103,27 @@ export function ReplayHistoryPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-mono text-sm text-gray-900">{job.id.slice(0, 8)}...</span>
+                        <span className="font-mono text-sm text-gray-900 dark:text-gray-200">{job.id.slice(0, 8)}...</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-gray-900 font-medium">{job.dlqTopicName || '-'}</span>
+                        <span className="text-gray-900 dark:text-white font-medium">{job.dlqTopicName || '-'}</span>
                         {job.sourceTopic && (
-                          <span className="text-gray-500 text-sm ml-2">→ {job.sourceTopic}</span>
+                          <span className="text-gray-500 dark:text-gray-400 text-sm ml-2">→ {job.sourceTopic}</span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm">
-                          <span className="text-green-600 font-medium">{job.succeeded}</span>
-                          <span className="text-gray-400"> / </span>
-                          <span className="text-gray-900">{job.totalMessages}</span>
+                          <span className="text-green-600 dark:text-green-400 font-medium">{job.succeeded}</span>
+                          <span className="text-gray-400 dark:text-gray-500"> / </span>
+                          <span className="text-gray-900 dark:text-white">{job.totalMessages}</span>
                           {job.failed > 0 && (
-                            <span className="text-red-600 ml-2">({job.failed} failed)</span>
+                            <span className="text-red-600 dark:text-red-400 ml-2">({job.failed} failed)</span>
                           )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <div className="w-20 bg-gray-200 rounded-full h-2">
+                          <div className="w-20 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
                             <div
                               className={`h-2 rounded-full ${
                                 (job.successRate || 0) === 100
@@ -135,15 +135,15 @@ export function ReplayHistoryPage() {
                               style={{ width: `${job.successRate || 0}%` }}
                             ></div>
                           </div>
-                          <span className="text-sm text-gray-600">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">
                             {job.successRate?.toFixed(0) || 0}%
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">
                         {job.initiatedBy}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {new Date(job.createdAt).toLocaleString()}
                       </td>
                     </tr>
@@ -151,7 +151,7 @@ export function ReplayHistoryPage() {
                 </tbody>
               </table>
             ) : (
-              <div className="p-8 text-center text-gray-500">
+              <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                 No replay jobs yet. Replay messages from a DLQ topic to see them here.
               </div>
             )}
@@ -164,8 +164,8 @@ export function ReplayHistoryPage() {
 
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-      <p className="text-sm text-gray-500">{label}</p>
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+      <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
     </div>
   );

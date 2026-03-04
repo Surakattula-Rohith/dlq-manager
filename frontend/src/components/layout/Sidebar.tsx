@@ -18,7 +18,7 @@ const navItems = [
 
 export function Sidebar() {
   return (
-    <aside className="w-64 bg-gray-900 text-white min-h-screen flex flex-col">
+    <aside className="w-64 bg-gray-900 text-white min-h-screen flex flex-col border-r border-gray-800">
       {/* Logo */}
       <div className="p-4 border-b border-gray-800">
         <div className="flex items-center gap-2">

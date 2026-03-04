@@ -93,6 +93,7 @@ When Kafka consumers fail to process messages, those messages often end up in a 
 | Replay History | Full audit trail of all replay operations |
 | Auto-Discovery | Detect DLQ topics by naming convention (`*-dlq`, `*-error`) |
 | Dashboard | Overview cards, topic list, recent replays |
+| Dark Mode | Toggle between light and dark themes, persisted across sessions |
 
 ### v2.0 — Dynamic Kafka Configuration
 | Feature | Description |

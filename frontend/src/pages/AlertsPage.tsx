@@ -48,19 +48,19 @@ export function AlertsPage() {
         </div>
 
         {/* Placeholder UI */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Alert Rules</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Alert Rules</h3>
           </div>
           <div className="p-8 text-center">
-            <Bell className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h4 className="text-lg font-medium text-gray-900 mb-2">No alert rules configured</h4>
-            <p className="text-gray-500 mb-4">
+            <Bell className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No alert rules configured</h4>
+            <p className="text-gray-500 dark:text-gray-400 mb-4">
               Alert configuration will be available in Phase 4.
             </p>
             <button
               disabled
-              className="px-4 py-2 bg-orange-100 text-orange-400 rounded-lg cursor-not-allowed"
+              className="px-4 py-2 bg-orange-100 dark:bg-orange-900/30 text-orange-400 dark:text-orange-500 rounded-lg cursor-not-allowed"
             >
               + Add Alert Rule
             </button>
@@ -68,34 +68,34 @@ export function AlertsPage() {
         </div>
 
         {/* Configuration Preview */}
-        <div className="mt-8 bg-gray-50 rounded-lg border border-gray-200 p-6">
-          <h4 className="text-sm font-semibold text-gray-700 mb-4">Preview: Alert Rule Configuration</h4>
-          <div className="bg-white rounded-lg border border-gray-200 p-4 opacity-60">
+        <div className="mt-8 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Preview: Alert Rule Configuration</h4>
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 opacity-60">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">DLQ Topic</label>
-                <select disabled className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">DLQ Topic</label>
+                <select disabled className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
                   <option>orders-dlq</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Threshold</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Threshold</label>
                 <input
                   type="number"
                   disabled
                   value="50"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Time Window</label>
-                <select disabled className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time Window</label>
+                <select disabled className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
                   <option>1 hour</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notification Channel</label>
-                <select disabled className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notification Channel</label>
+                <select disabled className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
                   <option>Slack #alerts</option>
                 </select>
               </div>
@@ -116,17 +116,17 @@ interface FeatureCardProps {
 
 function FeatureCard({ icon: Icon, title, description, status }: FeatureCardProps) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
       <div className="flex items-start justify-between mb-4">
-        <div className="p-2 bg-orange-100 rounded-lg">
-          <Icon className="w-6 h-6 text-orange-600" />
+        <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+          <Icon className="w-6 h-6 text-orange-600 dark:text-orange-400" />
         </div>
-        <span className="text-xs font-medium text-orange-600 bg-orange-100 px-2 py-1 rounded-full">
+        <span className="text-xs font-medium text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30 px-2 py-1 rounded-full">
           {status}
         </span>
       </div>
-      <h4 className="text-lg font-semibold text-gray-900 mb-2">{title}</h4>
-      <p className="text-gray-500 text-sm">{description}</p>
+      <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{title}</h4>
+      <p className="text-gray-500 dark:text-gray-400 text-sm">{description}</p>
     </div>
   );
 }

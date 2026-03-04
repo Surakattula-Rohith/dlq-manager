@@ -31,6 +31,8 @@ export function DashboardPage() {
     successfulReplays: replayHistory?.filter(r => r.status === 'COMPLETED').length || 0,
   };
 
+  const cardClass = "bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700";
+
   return (
     <div className="min-h-screen">
       <Header
@@ -49,7 +51,7 @@ export function DashboardPage() {
             subtitle={`${stats.activeTopics} active`}
             icon={Inbox}
             iconColor="text-blue-500"
-            bgColor="bg-blue-50"
+            bgColor="bg-blue-50 dark:bg-blue-900/20"
           />
           <SummaryCard
             title="Total Replays"
@@ -57,7 +59,7 @@ export function DashboardPage() {
             subtitle="All time"
             icon={TrendingUp}
             iconColor="text-green-500"
-            bgColor="bg-green-50"
+            bgColor="bg-green-50 dark:bg-green-900/20"
           />
           <SummaryCard
             title="Successful"
@@ -65,7 +67,7 @@ export function DashboardPage() {
             subtitle={`${stats.totalReplays > 0 ? Math.round((stats.successfulReplays / stats.totalReplays) * 100) : 0}% success rate`}
             icon={CheckCircle}
             iconColor="text-emerald-500"
-            bgColor="bg-emerald-50"
+            bgColor="bg-emerald-50 dark:bg-emerald-900/20"
           />
           <SummaryCard
             title="Active Alerts"
@@ -73,14 +75,14 @@ export function DashboardPage() {
             subtitle="Coming in Phase 4"
             icon={AlertTriangle}
             iconColor="text-orange-500"
-            bgColor="bg-orange-50"
+            bgColor="bg-orange-50 dark:bg-orange-900/20"
           />
         </div>
 
         {/* DLQ Topics Table */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">DLQ Topics</h2>
+        <div className={`${cardClass} mb-6`}>
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">DLQ Topics</h2>
             <Link
               to="/dlq-topics"
               className="text-sm text-orange-600 hover:text-orange-700 flex items-center gap-1"
@@ -90,32 +92,32 @@ export function DashboardPage() {
           </div>
           <div className="overflow-x-auto">
             {isLoading ? (
-              <div className="p-8 text-center text-gray-500">Loading...</div>
+              <div className="p-8 text-center text-gray-500 dark:text-gray-400">Loading...</div>
             ) : dlqTopics && dlqTopics.length > 0 ? (
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DLQ Topic</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source Topic</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detection</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">DLQ Topic</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Source Topic</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Detection</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {dlqTopics.slice(0, 5).map((topic) => (
-                    <tr key={topic.id} className="hover:bg-gray-50">
+                    <tr key={topic.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-medium text-gray-900">{topic.dlqTopicName}</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{topic.dlqTopicName}</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">
                         {topic.sourceTopic}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
                           topic.detectionType === 'AUTO'
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-gray-100 text-gray-700'
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300'
                         }`}>
                           {topic.detectionType}
                         </span>
@@ -123,8 +125,8 @@ export function DashboardPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${
                           topic.status === 'ACTIVE'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-yellow-100 text-yellow-700'
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                            : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
                         }`}>
                           <span className={`w-2 h-2 rounded-full ${
                             topic.status === 'ACTIVE' ? 'bg-green-500' : 'bg-yellow-500'
@@ -145,7 +147,7 @@ export function DashboardPage() {
                 </tbody>
               </table>
             ) : (
-              <div className="p-8 text-center text-gray-500">
+              <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                 No DLQ topics registered yet.{' '}
                 <Link to="/dlq-topics" className="text-orange-600 hover:underline">
                   Add one now
@@ -156,9 +158,9 @@ export function DashboardPage() {
         </div>
 
         {/* Recent Replays */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Recent Replays</h2>
+        <div className={cardClass}>
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Replays</h2>
             <Link
               to="/replay-history"
               className="text-sm text-orange-600 hover:text-orange-700 flex items-center gap-1"
@@ -168,34 +170,34 @@ export function DashboardPage() {
           </div>
           <div className="overflow-x-auto">
             {loadingHistory ? (
-              <div className="p-8 text-center text-gray-500">Loading...</div>
+              <div className="p-8 text-center text-gray-500 dark:text-gray-400">Loading...</div>
             ) : replayHistory && replayHistory.length > 0 ? (
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Job ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Initiated By</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Messages</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Job ID</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Initiated By</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Messages</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {replayHistory.slice(0, 5).map((job) => (
-                    <tr key={job.id} className="hover:bg-gray-50">
+                    <tr key={job.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-mono text-sm text-gray-900">{job.id.slice(0, 8)}...</span>
+                        <span className="font-mono text-sm text-gray-900 dark:text-gray-200">{job.id.slice(0, 8)}...</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">
                         {job.initiatedBy}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">
                         {job.succeeded}/{job.totalMessages}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <StatusBadge status={job.status} />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 text-sm">
+                      <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 text-sm">
                         {new Date(job.createdAt).toLocaleDateString()}
                       </td>
                     </tr>
@@ -203,7 +205,7 @@ export function DashboardPage() {
                 </tbody>
               </table>
             ) : (
-              <div className="p-8 text-center text-gray-500">
+              <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                 No replay jobs yet.
               </div>
             )}
@@ -225,12 +227,12 @@ interface SummaryCardProps {
 
 function SummaryCard({ title, value, subtitle, icon: Icon, iconColor, bgColor }: SummaryCardProps) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className="text-3xl font-bold text-gray-900 mt-1">{value}</p>
-          <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{value}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{subtitle}</p>
         </div>
         <div className={`p-3 rounded-lg ${bgColor}`}>
           <Icon className={`w-6 h-6 ${iconColor}`} />
@@ -242,11 +244,11 @@ function SummaryCard({ title, value, subtitle, icon: Icon, iconColor, bgColor }:
 
 function StatusBadge({ status }: { status: string }) {
   const statusStyles: Record<string, string> = {
-    COMPLETED: 'bg-green-100 text-green-700',
-    FAILED: 'bg-red-100 text-red-700',
-    IN_PROGRESS: 'bg-blue-100 text-blue-700',
-    PENDING: 'bg-gray-100 text-gray-700',
-    PARTIALLY_COMPLETED: 'bg-yellow-100 text-yellow-700',
+    COMPLETED: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+    FAILED: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+    IN_PROGRESS: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    PENDING: 'bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300',
+    PARTIALLY_COMPLETED: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
   };
 
   return (
