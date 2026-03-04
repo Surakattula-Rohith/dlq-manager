@@ -20,14 +20,7 @@ export function SettingsPage() {
     retry: false,
   });
 
-  const { data: topics, isLoading: loadingTopics } = useQuery({
-    queryKey: ['kafkaTopics'],
-    queryFn: kafkaApi.getTopics,
-    enabled: kafkaConfig?.configured !== false,
-    retry: false,
-  });
-
-  const [bootstrapServers, setBootstrapServers] = useState('');
+const [bootstrapServers, setBootstrapServers] = useState('');
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -250,55 +243,6 @@ export function SettingsPage() {
               </p>
             </div>
           )}
-        </div>
-
-        {/* Topics Overview */}
-        <div className={`${cardClass} p-6 mb-6`}>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Kafka Topics</h3>
-
-          {loadingTopics ? (
-            <div className="text-gray-500 dark:text-gray-400">Loading topics...</div>
-          ) : topics && topics.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-700">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Topic Name</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {topics.map((topic) => (
-                    <tr key={topic.name} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-4 py-3 font-mono text-sm text-gray-900 dark:text-gray-200">{topic.name}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-gray-500 dark:text-gray-400 text-center py-8">
-              No topics found in the Kafka cluster.
-            </div>
-          )}
-        </div>
-
-        {/* API Configuration */}
-        <div className={`${cardClass} p-6`}>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">API Configuration</h3>
-          <div className="space-y-4">
-            <div>
-              <label className={labelClass}>Backend API URL</label>
-              <input
-                type="text"
-                value={import.meta.env.VITE_API_URL || 'http://localhost:8080'}
-                readOnly
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Set via VITE_API_URL environment variable
-              </p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
