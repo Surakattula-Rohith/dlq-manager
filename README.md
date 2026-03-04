@@ -28,55 +28,39 @@ When Kafka consumers fail to process messages, those messages often end up in a 
 
 ## Screenshots
 
-<details>
-<summary><strong>Dashboard</strong> — Overview of all DLQ topics, stats, and recent replays</summary>
-
+### Dashboard
 ![Dashboard](assets/01-dashboard.png)
-</details>
+![Dashboard Dark](assets/15-dark-dashboard.png)
 
-<details>
-<summary><strong>DLQ Topics</strong> — List, search, add, edit, and delete topic registrations</summary>
-
+### DLQ Topics
 ![DLQ Topics List](assets/02-dlq-topics-list.png)
-![Add DLQ Topic](assets/09-add-topic-modal.png)
-</details>
+![DLQ Topics Dark](assets/16-dark-dlq-topics.png)
 
-<details>
-<summary><strong>Message Browser</strong> — Browse messages with error breakdown visualization</summary>
-
+### Message Browser
 ![Topic Detail with Error Breakdown](assets/04-topic-detail-error-breakdown.png)
-</details>
 
-<details>
-<summary><strong>Message Details</strong> — Full payload, headers, metadata, and single-message replay</summary>
-
+### Message Details
 ![Message Detail Modal](assets/05-message-detail-modal.png)
-</details>
 
-<details>
-<summary><strong>Replay History</strong> — Audit trail with status, success rates, and timestamps</summary>
-
+### Replay History
 ![Replay History](assets/06-replay-history.png)
-</details>
+![Replay History Dark](assets/17-dark-replay-history.png)
+
+### Alerts
+![Alerts](assets/07-alerts-coming-soon.png)
+![Alerts Dark](assets/18-dark-alerts.png)
+
+### Settings
+![Settings - Kafka Config](assets/10-settings-kafka-config.png)
+![Settings Dark](assets/19-dark-settings.png)
 
 <details>
-<summary><strong>Settings</strong> — Kafka configuration, connection testing, and cluster info</summary>
-
-**Configure bootstrap servers:**
-
-![Settings - Kafka Config](assets/10-settings-kafka-config.png)
-
-**Test connection (Save enabled only after success):**
+<summary>More Settings screenshots</summary>
 
 ![Connection Test Success](assets/11-settings-connection-test-success.png)
-
-**Configuration saved:**
-
 ![Config Saved](assets/12-settings-config-saved.png)
-
-**Failed connection (Save stays disabled):**
-
 ![Connection Failed](assets/13-settings-connection-test-failed.png)
+![Add DLQ Topic](assets/09-add-topic-modal.png)
 </details>
 
 ---
@@ -93,7 +77,6 @@ When Kafka consumers fail to process messages, those messages often end up in a 
 | Replay History | Full audit trail of all replay operations |
 | Auto-Discovery | Detect DLQ topics by naming convention (`*-dlq`, `*-error`) |
 | Dashboard | Overview cards, topic list, recent replays |
-| Dark Mode | Toggle between light and dark themes, persisted across sessions |
 
 ### v2.0 — Dynamic Kafka Configuration
 | Feature | Description |
@@ -103,6 +86,11 @@ When Kafka consumers fail to process messages, those messages often end up in a 
 | Persistent Config | Configuration stored in PostgreSQL, survives restarts |
 | Hot Reload | Config changes take effect immediately — no backend restart needed |
 | Fallback | Falls back to `application.properties` if no UI config is saved |
+
+### v3.0 — UI Polish
+| Feature | Description |
+|---------|-------------|
+| Dark Mode | Toggle between light and dark themes, persisted across sessions |
 
 ---
 
@@ -347,10 +335,11 @@ DLQ messages should include these headers for full functionality:
 - [x] **Phase 2** — Message Browsing & Error Analytics
 - [x] **Phase 3** — Message Replay (single & bulk)
 - [x] **Phase 4** — Frontend Dashboard (React + Tailwind)
-- [ ] **Phase 5** — Alerting & Notifications
 - [x] **Phase 6** — Dynamic Kafka Configuration
-- [ ] **Phase 7** — Authentication & RBAC
-- [ ] **Phase 8** — Multi-cluster Support
+- [x] **Phase 7** — Dark Mode & UI Polish
+- [ ] **Phase 8** — Alerting & Notifications
+- [ ] **Phase 9** — Authentication & RBAC
+- [ ] **Phase 10** — Multi-cluster Support
 
 See [TODO.md](TODO.md) for the detailed backlog.
 

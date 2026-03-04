@@ -31,7 +31,16 @@
 
 ---
 
-## v3.0 — Alerting & Notifications (Planned)
+## v3.0 — UI Polish (Completed)
+
+| Feature | Status |
+|---------|--------|
+| Dark mode toggle | Done |
+| Dark mode across all pages (inputs, tables, modals, cards) | Done |
+
+---
+
+## v4.0 — Alerting & Notifications (Planned)
 
 ### Alert Rules
 - [ ] Create alert rules for DLQ topics
@@ -52,7 +61,7 @@
 
 ---
 
-## v4.0 — Authentication & RBAC (Planned)
+## v5.0 — Authentication & RBAC (Planned)
 
 - [ ] User authentication (username/password or OAuth)
 - [ ] Role-based access control (Admin, Viewer, Operator)
@@ -61,7 +70,7 @@
 
 ---
 
-## v5.0 — Multi-Cluster & Advanced Kafka (Planned)
+## v6.0 — Multi-Cluster & Advanced Kafka (Planned)
 
 - [ ] Multi-cluster support with cluster switching
 - [ ] Connection profiles (dev/staging/prod)
