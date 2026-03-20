@@ -47,8 +47,16 @@ When Kafka consumers fail to process messages, those messages often end up in a 
 ![Replay History Dark](assets/17-dark-replay-history.png)
 
 ### Alerts
-![Alerts](assets/07-alerts-coming-soon.png)
+![Alert Rules](assets/20-alerts-rules.png)
+![Alert History - Firing](assets/24-alert-history-firing.png)
+![Alert History - Snoozed](assets/25-alert-history-snoozed.png)
+![Alert History - Acknowledged](assets/21-alert-history-acknowledged.png)
 ![Alerts Dark](assets/18-dark-alerts.png)
+![Snooze Modal Dark](assets/26-dark-alert-snooze-modal.png)
+
+### Slack Notifications
+![Slack Notification](assets/22-slack-notification.png)
+![Slack Multiple Alerts](assets/23-slack-multiple-alerts.png)
 
 ### Settings
 ![Settings - Kafka Config](assets/10-settings-kafka-config.png)
@@ -91,6 +99,16 @@ When Kafka consumers fail to process messages, those messages often end up in a 
 | Feature | Description |
 |---------|-------------|
 | Dark Mode | Toggle between light and dark themes, persisted across sessions |
+
+### v4.0 — Alerting & Notifications
+| Feature | Description |
+|---------|-------------|
+| Alert Rules | Threshold and time-window based rules per DLQ topic |
+| Alert History | View all fired alert events with status tracking |
+| Acknowledge | Mark a firing alert as acknowledged |
+| Snooze | Temporarily silence an alert for a configurable duration |
+| Cooldown | Prevent duplicate alerts from firing repeatedly |
+| Slack Notifications | Send alert messages to a Slack channel via incoming webhook |
 
 ---
 
@@ -277,7 +295,7 @@ frontend/src/
 │   ├── DlqTopicDetailPage.tsx # Message browser
 │   ├── ReplayHistoryPage.tsx  # Replay audit trail
 │   ├── SettingsPage.tsx       # Kafka config + cluster info
-│   └── AlertsPage.tsx         # Alerts (coming soon)
+│   └── AlertsPage.tsx         # Alert rules and history
 ├── types/index.ts             # TypeScript interfaces
 ├── App.tsx                    # Router setup
 └── main.tsx                   # Entry point
@@ -337,7 +355,7 @@ DLQ messages should include these headers for full functionality:
 - [x] **Phase 4** — Frontend Dashboard (React + Tailwind)
 - [x] **Phase 6** — Dynamic Kafka Configuration
 - [x] **Phase 7** — Dark Mode & UI Polish
-- [ ] **Phase 8** — Alerting & Notifications
+- [x] **Phase 8** — Alerting & Notifications (Slack)
 - [ ] **Phase 9** — Authentication & RBAC
 - [ ] **Phase 10** — Multi-cluster Support
 
@@ -352,8 +370,7 @@ See [TODO.md](TODO.md) for the detailed backlog.
 | Auth | No authentication or login | High |
 | Kafka | Single cluster only | Medium |
 | Kafka | No SASL/SSL support | Medium |
-| Alerts | No DLQ threshold alerts | Medium |
-| Notifications | No Slack/Email integration | Low |
+| Notifications | Slack only — no email or other channels | Low |
 
 ---
 

@@ -78,24 +78,48 @@ export interface BulkReplayRequest {
 }
 
 // Alert types
-export interface AlertRule {
+export type AlertType = 'THRESHOLD' | 'TIME_WINDOW';
+export type AlertStatus = 'FIRING' | 'ACKNOWLEDGED' | 'SNOOZED';
+export type NotificationChannelType = 'SLACK';
+
+export interface NotificationChannel {
   id: string;
-  dlqTopicId?: string;
-  dlqTopicName?: string;
-  threshold: number;
-  windowMinutes: number;
-  notificationChannel: 'SLACK' | 'EMAIL' | 'PAGERDUTY';
+  name: string;
+  type: NotificationChannelType;
+  configuration: string; // JSON string
   enabled: boolean;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  dlqTopicId: string;
+  dlqTopicName: string;
+  alertType: AlertType;
+  threshold: number;
+  windowMinutes?: number;
+  notificationChannelId?: string;
+  notificationChannelName?: string;
+  notificationChannelType?: NotificationChannelType;
+  cooldownMinutes: number;
+  enabled: boolean;
+  lastFiredAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AlertEvent {
   id: string;
   alertRuleId: string;
+  alertRuleName: string;
   dlqTopicName: string;
-  status: 'FIRING' | 'RESOLVED';
+  status: AlertStatus;
   messageCount: number;
   triggeredAt: string;
+  acknowledgedAt?: string;
+  snoozedUntil?: string;
 }
 
 // Dashboard types

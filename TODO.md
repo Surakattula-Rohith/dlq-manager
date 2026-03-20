@@ -40,23 +40,23 @@
 
 ---
 
-## v4.0 — Alerting & Notifications (Planned)
+## v4.0 — Alerting & Notifications (Completed)
 
 ### Alert Rules
-- [ ] Create alert rules for DLQ topics
-- [ ] Threshold-based alerts (e.g., "Alert when messages > 100")
-- [ ] Time-window alerts (e.g., "50+ messages in 5 minutes")
-- [ ] Alert rule enable/disable toggle
+- [x] Create alert rules for DLQ topics
+- [x] Threshold-based alerts (e.g., "Alert when messages > 100")
+- [x] Time-window alerts (e.g., "50+ messages in 5 minutes")
+- [x] Alert rule enable/disable toggle
 
 ### Notification Channels
-- [ ] Slack integration
-- [ ] Email notifications
-- [ ] PagerDuty integration
-- [ ] Webhook support for custom integrations
+- [x] Slack integration (incoming webhooks)
+- [x] Email notifications (Spring Mail / SMTP)
+- [x] PagerDuty integration (Events API v2)
+- [x] Webhook support for custom integrations
 
 ### Alert Management
-- [ ] Alert history/log
-- [ ] Acknowledge & snooze alerts
+- [x] Alert history/log
+- [x] Acknowledge & snooze alerts
 - [ ] Alert escalation
 
 ---
