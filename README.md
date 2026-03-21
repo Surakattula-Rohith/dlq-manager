@@ -10,7 +10,9 @@
 
 A full-stack dashboard for managing Kafka Dead Letter Queues — browse failed messages, analyze error patterns, replay them back to source topics, and get alerted when things go wrong.
 
-![Dashboard](assets/01-dashboard.png)
+> Here's a quick demo of the full flow — browsing DLQ messages, replaying them, and viewing alert history.
+
+![Demo](assets/Animation.gif)
 
 ---
 
