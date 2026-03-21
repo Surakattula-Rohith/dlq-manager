@@ -1,7 +1,7 @@
 {
 	"info": {
 		"name": "DLQ Manager - Full API",
-		"description": "Complete API endpoints for DLQ Manager - Phases 1, 2 & 3",
+		"description": "Complete API endpoints for DLQ Manager - v1.0 through v4.0",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -17,6 +17,21 @@
 		},
 		{
 			"key": "replayJobId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "notificationChannelId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "alertRuleId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "alertEventId",
 			"value": "",
 			"type": "string"
 		}
@@ -81,6 +96,69 @@
 			"description": "Endpoints for Kafka cluster information"
 		},
 		{
+			"name": "Kafka Configuration",
+			"item": [
+				{
+					"name": "Get Current Config",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/kafka/config",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "kafka", "config"]
+						},
+						"description": "Get current Kafka configuration and connection status"
+					}
+				},
+				{
+					"name": "Test Connection",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bootstrapServers\": \"localhost:9092\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/kafka/config/test",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "kafka", "config", "test"]
+						},
+						"description": "Test a Kafka connection before saving. Returns cluster info on success."
+					}
+				},
+				{
+					"name": "Save Config",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bootstrapServers\": \"localhost:9092\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/kafka/config",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "kafka", "config"]
+						},
+						"description": "Save Kafka bootstrap servers. Takes effect immediately without restart."
+					}
+				}
+			],
+			"description": "Dynamic Kafka configuration (v2)"
+		},
+		{
 			"name": "DLQ Management",
 			"item": [
 				{
@@ -116,7 +194,6 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"// Save the DLQ ID for later use",
 									"if (pm.response.code === 201) {",
 									"    var jsonData = pm.response.json();",
 									"    pm.collectionVariables.set('dlqTopicId', jsonData.dlqTopic.id);",
@@ -179,33 +256,11 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "dlq-topics", "{{dlqTopicId}}"]
 						},
-						"description": "Get a specific DLQ by ID (uses saved dlqTopicId variable)"
+						"description": "Get a specific DLQ by ID"
 					}
 				},
 				{
-					"name": "Update DLQ - Change Status to PAUSED",
-					"request": {
-						"method": "PUT",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"status\": \"PAUSED\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "dlq-topics", "{{dlqTopicId}}"]
-						},
-						"description": "Update DLQ status to PAUSED"
-					}
-				},
-				{
-					"name": "Update DLQ - Change Source Topic",
+					"name": "Update DLQ",
 					"request": {
 						"method": "PUT",
 						"header": [
@@ -223,7 +278,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "dlq-topics", "{{dlqTopicId}}"]
 						},
-						"description": "Update multiple fields of a DLQ"
+						"description": "Update DLQ configuration"
 					}
 				},
 				{
@@ -236,7 +291,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "dlq-topics", "{{dlqTopicId}}"]
 						},
-						"description": "Delete a DLQ registration (uses saved dlqTopicId variable)"
+						"description": "Delete a DLQ registration"
 					}
 				}
 			],
@@ -246,7 +301,7 @@
 			"name": "Message Browsing",
 			"item": [
 				{
-					"name": "Browse Messages - Page 1 (Default)",
+					"name": "Browse Messages - Page 1",
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -255,90 +310,11 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
 							"query": [
-								{
-									"key": "page",
-									"value": "1",
-									"description": "Page number (1-based)"
-								},
-								{
-									"key": "size",
-									"value": "10",
-									"description": "Messages per page (1-100)"
-								}
+								{"key": "page", "value": "1"},
+								{"key": "size", "value": "10"}
 							]
 						},
-						"description": "Browse messages from a DLQ topic with pagination. Returns message details including payload, headers, error info, and pagination metadata."
-					}
-				},
-				{
-					"name": "Browse Messages - Page 2",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/messages?page=2&size=10",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
-							"query": [
-								{
-									"key": "page",
-									"value": "2"
-								},
-								{
-									"key": "size",
-									"value": "10"
-								}
-							]
-						},
-						"description": "Get the second page of messages (messages 11-20)"
-					}
-				},
-				{
-					"name": "Browse Messages - Custom Page Size (5)",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/messages?page=1&size=5",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "size",
-									"value": "5",
-									"description": "Show only 5 messages per page"
-								}
-							]
-						},
-						"description": "Browse with custom page size - useful for testing different page sizes"
-					}
-				},
-				{
-					"name": "Browse Messages - All (Size 100)",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/messages?page=1&size=100",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "size",
-									"value": "100",
-									"description": "Maximum page size is 100"
-								}
-							]
-						},
-						"description": "Get up to 100 messages at once (max page size)"
+						"description": "Browse messages with pagination"
 					}
 				},
 				{
@@ -351,7 +327,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "message-count"]
 						},
-						"description": "Get total message count for a DLQ topic without fetching all messages. Useful for pagination UI."
+						"description": "Get total message count for a DLQ topic"
 					}
 				},
 				{
@@ -364,7 +340,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "error-breakdown"]
 						},
-						"description": "Get error breakdown statistics for a DLQ topic. Shows breakdown by error type with counts and percentages. This helps identify the most common errors and prioritize fixes."
+						"description": "Get error breakdown statistics — counts and percentages by error type"
 					}
 				},
 				{
@@ -377,46 +353,15 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
 							"query": [
-								{
-									"key": "page",
-									"value": "0",
-									"description": "Invalid - page must be >= 1"
-								},
-								{
-									"key": "size",
-									"value": "10"
-								}
+								{"key": "page", "value": "0"},
+								{"key": "size", "value": "10"}
 							]
 						},
-						"description": "Test validation: Page number must be >= 1. Should return 400 Bad Request."
-					}
-				},
-				{
-					"name": "Test: Invalid Page Size (Should Fail)",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/dlq-topics/{{dlqTopicId}}/messages?page=1&size=101",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "dlq-topics", "{{dlqTopicId}}", "messages"],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "size",
-									"value": "101",
-									"description": "Invalid - size must be <= 100"
-								}
-							]
-						},
-						"description": "Test validation: Page size must be between 1 and 100. Should return 400 Bad Request."
+						"description": "Page must be >= 1. Should return 400."
 					}
 				}
 			],
-			"description": "Browse messages from DLQ topics with pagination and filtering"
+			"description": "Browse messages from DLQ topics with pagination and analytics"
 		},
 		{
 			"name": "Message Replay",
@@ -428,7 +373,6 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"// Save the replay job ID for later use",
 									"if (pm.response.code === 200) {",
 									"    var jsonData = pm.response.json();",
 									"    if (jsonData.replayJob && jsonData.replayJob.id) {",
@@ -458,51 +402,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "replay", "single"]
 						},
-						"description": "Replay a single message from DLQ to source topic. Reads the message from DLQ at specified offset/partition and sends it to the source topic. Auto-saves the replay job ID."
-					}
-				},
-				{
-					"name": "Replay Message - Offset 1",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 1,\n    \"messagePartition\": 0,\n    \"initiatedBy\": \"test-user@example.com\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/replay/single",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "replay", "single"]
-						},
-						"description": "Replay message at offset 1 (second message)"
-					}
-				},
-				{
-					"name": "Replay Message - Offset 2",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messageOffset\": 2,\n    \"messagePartition\": 0,\n    \"initiatedBy\": \"test-user@example.com\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/replay/single",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "replay", "single"]
-						},
-						"description": "Replay message at offset 2 (third message)"
+						"description": "Replay a single message. Auto-saves the replay job ID."
 					}
 				},
 				{
@@ -512,12 +412,10 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"// Save the replay job ID for later use",
 									"if (pm.response.code === 200) {",
 									"    var jsonData = pm.response.json();",
 									"    if (jsonData.replayJob && jsonData.replayJob.id) {",
 									"        pm.collectionVariables.set('replayJobId', jsonData.replayJob.id);",
-									"        console.log('Saved Bulk Replay Job ID:', jsonData.replayJob.id);",
 									"    }",
 									"}"
 								],
@@ -535,102 +433,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 3, \"partition\": 0},\n        {\"offset\": 4, \"partition\": 0},\n        {\"offset\": 5, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@example.com\"\n}"
+							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 0, \"partition\": 0},\n        {\"offset\": 1, \"partition\": 0},\n        {\"offset\": 2, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"test-user@example.com\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/replay/bulk",
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "replay", "bulk"]
 						},
-						"description": "Bulk replay of multiple messages in a single operation. Replays 3 messages (offsets 3, 4, 5). Auto-saves the replay job ID."
-					}
-				},
-				{
-					"name": "Bulk Replay - 5 Messages",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 6, \"partition\": 0},\n        {\"offset\": 7, \"partition\": 0},\n        {\"offset\": 8, \"partition\": 0},\n        {\"offset\": 9, \"partition\": 0},\n        {\"offset\": 10, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@example.com\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/replay/bulk",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "replay", "bulk"]
-						},
-						"description": "Bulk replay of 5 messages (offsets 6-10)"
-					}
-				},
-				{
-					"name": "Bulk Replay - 10 Messages",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 11, \"partition\": 0},\n        {\"offset\": 12, \"partition\": 0},\n        {\"offset\": 13, \"partition\": 0},\n        {\"offset\": 14, \"partition\": 0},\n        {\"offset\": 15, \"partition\": 0},\n        {\"offset\": 16, \"partition\": 0},\n        {\"offset\": 17, \"partition\": 0},\n        {\"offset\": 18, \"partition\": 0},\n        {\"offset\": 19, \"partition\": 0},\n        {\"offset\": 20, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"bulk-test-user@example.com\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/replay/bulk",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "replay", "bulk"]
-						},
-						"description": "Bulk replay of 10 messages (offsets 11-20). Test with larger batch."
-					}
-				},
-				{
-					"name": "Test: Bulk Replay with Invalid Offset (Partial Failure)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": [\n        {\"offset\": 21, \"partition\": 0},\n        {\"offset\": 999999, \"partition\": 0},\n        {\"offset\": 22, \"partition\": 0}\n    ],\n    \"initiatedBy\": \"test-user@example.com\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/replay/bulk",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "replay", "bulk"]
-						},
-						"description": "Test partial failure: One invalid offset (999999) should fail, but others should succeed. Job status should be COMPLETED with succeeded=2, failed=1."
-					}
-				},
-				{
-					"name": "Test: Bulk Replay Empty Messages (Should Fail)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"messages\": []\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/replay/bulk",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "replay", "bulk"]
-						},
-						"description": "Test validation: Empty messages array should return 400 Bad Request with error message."
+						"description": "Bulk replay of 3 messages. Auto-saves the replay job ID."
 					}
 				},
 				{
@@ -643,7 +453,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "replay", "jobs", "{{replayJobId}}"]
 						},
-						"description": "Get details of a specific replay job by ID (uses saved replayJobId variable). Shows job status, success/failure counts, duration, etc."
+						"description": "Get status and details of a specific replay job"
 					}
 				},
 				{
@@ -656,42 +466,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "replay", "history"]
 						},
-						"description": "Get all replay jobs across all DLQ topics, ordered by creation time (newest first). Useful for viewing complete replay history."
-					}
-				},
-				{
-					"name": "Get Replay History for DLQ",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/replay/history/dlq/{{dlqTopicId}}",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "replay", "history", "dlq", "{{dlqTopicId}}"]
-						},
-						"description": "Get replay history for a specific DLQ topic (uses saved dlqTopicId variable). Shows all replay jobs for that DLQ."
-					}
-				},
-				{
-					"name": "Test: Invalid DLQ ID (Should Fail)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"00000000-0000-0000-0000-000000000000\",\n    \"messageOffset\": 0,\n    \"messagePartition\": 0\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/replay/single",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "replay", "single"]
-						},
-						"description": "Test error handling: Invalid DLQ UUID should return 400 Bad Request with error message."
+						"description": "Get all replay jobs, newest first"
 					}
 				},
 				{
@@ -713,96 +488,361 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "replay", "single"]
 						},
-						"description": "Test error handling: Non-existent offset should fail with 'Message not found at offset' error."
-					}
-				},
-				{
-					"name": "Test: Missing Required Fields (Should Fail)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"dlqTopicId\": \"{{dlqTopicId}}\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/replay/single",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "replay", "single"]
-						},
-						"description": "Test validation: Missing required fields (messageOffset, messagePartition) should return 400 Bad Request."
+						"description": "Non-existent offset should fail with 'Message not found' error."
 					}
 				}
 			],
-			"description": "Replay messages from DLQ to source topics and view replay history"
+			"description": "Replay messages from DLQ to source topics"
 		},
 		{
-			"name": "Test Scenarios",
+			"name": "Notification Channels",
 			"item": [
 				{
-					"name": "Scenario 1: Register Non-Existent Topic (Should Fail)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"dlqTopicName\": \"fake-topic-dlq\",\n    \"sourceTopic\": \"fake-topic\",\n    \"detectionType\": \"MANUAL\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/dlq-topics",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "dlq-topics"]
-						},
-						"description": "Test validation - should return 400 error because topic doesn't exist in Kafka"
-					}
-				},
-				{
-					"name": "Scenario 2: Register Duplicate DLQ (Should Fail)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"dlqTopicName\": \"orders-dlq\",\n    \"sourceTopic\": \"orders\",\n    \"detectionType\": \"MANUAL\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/dlq-topics",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "dlq-topics"]
-						},
-						"description": "Test duplicate detection - should fail if orders-dlq is already registered"
-					}
-				},
-				{
-					"name": "Scenario 3: Get Non-Existent DLQ (Should Return 404)",
+					"name": "List All Channels",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/api/dlq-topics/00000000-0000-0000-0000-000000000000",
+							"raw": "{{baseUrl}}/api/notification-channels",
 							"host": ["{{baseUrl}}"],
-							"path": ["api", "dlq-topics", "00000000-0000-0000-0000-000000000000"]
+							"path": ["api", "notification-channels"]
 						},
-						"description": "Test 404 handling - should return error for non-existent ID"
+						"description": "Get all notification channels"
+					}
+				},
+				{
+					"name": "Get Channel by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/notification-channels/{{notificationChannelId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "notification-channels", "{{notificationChannelId}}"]
+						},
+						"description": "Get a specific notification channel"
+					}
+				},
+				{
+					"name": "Create Slack Channel",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.collectionVariables.set('notificationChannelId', jsonData.channel.id);",
+									"    console.log('Saved Channel ID:', jsonData.channel.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"#alerts\",\n    \"type\": \"SLACK\",\n    \"configuration\": \"{\\\"webhookUrl\\\": \\\"https://hooks.slack.com/services/YOUR/WEBHOOK/URL\\\"}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/notification-channels",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "notification-channels"]
+						},
+						"description": "Create a Slack notification channel. Auto-saves the channel ID."
+					}
+				},
+				{
+					"name": "Update Channel",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"#dlq-alerts\",\n    \"type\": \"SLACK\",\n    \"configuration\": \"{\\\"webhookUrl\\\": \\\"https://hooks.slack.com/services/YOUR/WEBHOOK/URL\\\"}\",\n    \"enabled\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/notification-channels/{{notificationChannelId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "notification-channels", "{{notificationChannelId}}"]
+						},
+						"description": "Update an existing notification channel"
+					}
+				},
+				{
+					"name": "Delete Channel",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/notification-channels/{{notificationChannelId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "notification-channels", "{{notificationChannelId}}"]
+						},
+						"description": "Delete a notification channel"
+					}
+				},
+				{
+					"name": "Test Channel",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/notification-channels/{{notificationChannelId}}/test",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "notification-channels", "{{notificationChannelId}}", "test"]
+						},
+						"description": "Send a test notification to verify the channel works"
 					}
 				}
 			],
-			"description": "Test error handling and validation"
+			"description": "Manage Slack notification channels (v4)"
+		},
+		{
+			"name": "Alert Rules",
+			"item": [
+				{
+					"name": "List All Rules",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/alert-rules",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alert-rules"]
+						},
+						"description": "Get all alert rules"
+					}
+				},
+				{
+					"name": "Get Rule by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/alert-rules/{{alertRuleId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alert-rules", "{{alertRuleId}}"]
+						},
+						"description": "Get a specific alert rule"
+					}
+				},
+				{
+					"name": "Create Threshold Rule",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.collectionVariables.set('alertRuleId', jsonData.alertRule.id);",
+									"    console.log('Saved Alert Rule ID:', jsonData.alertRule.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"High orders-dlq volume\",\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"alertType\": \"THRESHOLD\",\n    \"threshold\": 100,\n    \"notificationChannelId\": \"{{notificationChannelId}}\",\n    \"cooldownMinutes\": 30\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/alert-rules",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alert-rules"]
+						},
+						"description": "Create a threshold-based alert rule. Fires when message count >= threshold. Auto-saves the rule ID."
+					}
+				},
+				{
+					"name": "Create Time Window Rule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Sudden spike in orders-dlq\",\n    \"dlqTopicId\": \"{{dlqTopicId}}\",\n    \"alertType\": \"TIME_WINDOW\",\n    \"threshold\": 50,\n    \"windowMinutes\": 5,\n    \"notificationChannelId\": \"{{notificationChannelId}}\",\n    \"cooldownMinutes\": 30\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/alert-rules",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alert-rules"]
+						},
+						"description": "Create a time-window alert rule. Fires when message count increases by >= threshold within windowMinutes."
+					}
+				},
+				{
+					"name": "Update Rule",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"High orders-dlq volume\",\n    \"alertType\": \"THRESHOLD\",\n    \"threshold\": 200,\n    \"notificationChannelId\": \"{{notificationChannelId}}\",\n    \"cooldownMinutes\": 60,\n    \"enabled\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/alert-rules/{{alertRuleId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alert-rules", "{{alertRuleId}}"]
+						},
+						"description": "Update an existing alert rule"
+					}
+				},
+				{
+					"name": "Toggle Rule (Enable/Disable)",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/alert-rules/{{alertRuleId}}/toggle",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alert-rules", "{{alertRuleId}}", "toggle"]
+						},
+						"description": "Toggle a rule between enabled and disabled"
+					}
+				},
+				{
+					"name": "Delete Rule",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/alert-rules/{{alertRuleId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alert-rules", "{{alertRuleId}}"]
+						},
+						"description": "Delete an alert rule"
+					}
+				}
+			],
+			"description": "Manage alert rules for DLQ topics (v4)"
+		},
+		{
+			"name": "Alert Events",
+			"item": [
+				{
+					"name": "List All Events",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    var firing = jsonData.alertEvents.filter(e => e.status === 'FIRING');",
+									"    if (firing.length > 0) {",
+									"        pm.collectionVariables.set('alertEventId', firing[0].id);",
+									"        console.log('Saved firing Alert Event ID:', firing[0].id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/alert-events",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alert-events"]
+						},
+						"description": "Get all alert events. Auto-saves the first firing event ID."
+					}
+				},
+				{
+					"name": "Acknowledge Event",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/alert-events/{{alertEventId}}/acknowledge",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alert-events", "{{alertEventId}}", "acknowledge"]
+						},
+						"description": "Acknowledge a firing alert event"
+					}
+				},
+				{
+					"name": "Snooze Event - 30 minutes",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"minutes\": 30\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/alert-events/{{alertEventId}}/snooze",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alert-events", "{{alertEventId}}", "snooze"]
+						},
+						"description": "Snooze a firing alert for 30 minutes"
+					}
+				},
+				{
+					"name": "Snooze Event - 1 hour",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"minutes\": 60\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/alert-events/{{alertEventId}}/snooze",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alert-events", "{{alertEventId}}", "snooze"]
+						},
+						"description": "Snooze a firing alert for 1 hour"
+					}
+				}
+			],
+			"description": "View and manage fired alert events (v4)"
 		}
 	]
 }

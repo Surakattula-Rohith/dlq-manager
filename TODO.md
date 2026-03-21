@@ -1,67 +1,20 @@
-# DLQ Manager — Backlog & Roadmap
+# DLQ Manager — Backlog
 
 ---
 
-## v1.0 — Core Platform (Completed)
+## v4.0 — Alerting & Notifications ✓
 
-| Feature | Status |
-|---------|--------|
-| DLQ Topic Management (CRUD) | Done |
-| Message Browsing with pagination | Done |
-| Error Analytics & breakdown | Done |
-| Single & Bulk Message Replay | Done |
-| Replay History & audit trail | Done |
-| Auto-Discovery of DLQ topics | Done |
-| React + Tailwind Frontend | Done |
-| Dashboard with overview cards | Done |
-
----
-
-## v2.0 — Dynamic Kafka Configuration (Completed)
-
-| Feature | Status |
-|---------|--------|
-| Settings page to configure bootstrap servers | Done |
-| Connection test button (must pass before save) | Done |
-| Save disabled until test succeeds | Done |
-| Configuration stored in PostgreSQL | Done |
-| Hot reload — no backend restart needed | Done |
-| Fallback to `application.properties` if no DB config | Done |
-| First-time setup banner for new users | Done |
-
----
-
-## v3.0 — UI Polish (Completed)
-
-| Feature | Status |
-|---------|--------|
-| Dark mode toggle | Done |
-| Dark mode across all pages (inputs, tables, modals, cards) | Done |
-
----
-
-## v4.0 — Alerting & Notifications (Completed)
-
-### Alert Rules
-- [x] Create alert rules for DLQ topics
-- [x] Threshold-based alerts (e.g., "Alert when messages > 100")
-- [x] Time-window alerts (e.g., "50+ messages in 5 minutes")
+- [x] Threshold-based alert rules (fire when message count ≥ N)
+- [x] Time-window alert rules (fire when count increases by ≥ N in X minutes)
 - [x] Alert rule enable/disable toggle
-
-### Notification Channels
-- [x] Slack integration (incoming webhooks)
-- [x] Email notifications (Spring Mail / SMTP)
-- [x] PagerDuty integration (Events API v2)
-- [x] Webhook support for custom integrations
-
-### Alert Management
-- [x] Alert history/log
-- [x] Acknowledge & snooze alerts
-- [ ] Alert escalation
+- [x] Cooldown support to prevent duplicate alerts
+- [x] Alert history with Firing / Acknowledged / Snoozed states
+- [x] Acknowledge and snooze actions
+- [x] Slack notifications via incoming webhooks
 
 ---
 
-## v5.0 — Authentication & RBAC (Planned)
+## v5.0 — Authentication & RBAC
 
 - [ ] User authentication (username/password or OAuth)
 - [ ] Role-based access control (Admin, Viewer, Operator)
@@ -70,51 +23,41 @@
 
 ---
 
-## v6.0 — Multi-Cluster & Advanced Kafka (Planned)
+## v6.0 — Multi-Cluster & Advanced Kafka
 
 - [ ] Multi-cluster support with cluster switching
-- [ ] Connection profiles (dev/staging/prod)
+- [ ] Connection profiles (dev / staging / prod)
 - [ ] SASL/SSL authentication support
 
 ---
 
-## Future Enhancements
+## Backlog
 
 ### Message Management
-- [ ] Search messages by key, payload content, or headers
-- [ ] Filter messages by date range
-- [ ] Filter messages by error type
+- [ ] Search messages by key, payload, or headers
+- [ ] Filter by date range or error type
 - [ ] Export messages to JSON/CSV
 - [ ] Archive/delete messages from DLQ
-- [ ] Message preview without full modal
 
 ### Replay Enhancements
-- [ ] Scheduled replays (replay at specific time)
-- [ ] Replay with delay between messages
-- [ ] Replay to different topic (not just source)
-- [ ] Retry policies (exponential backoff)
+- [ ] Scheduled replays
+- [ ] Replay to a different topic
 - [ ] Dry-run mode (validate without sending)
 
-### Analytics & Monitoring
-- [ ] Message trend charts (messages over time)
-- [ ] Error rate graphs
-- [ ] Replay success rate trends
+### Analytics
+- [ ] Message trend charts over time
 - [ ] Real-time message count updates
 - [ ] Kafka consumer lag monitoring
 
 ### Deployment
-- [ ] Single Docker image with frontend + backend
+- [ ] Single Docker image (frontend + backend)
 - [ ] Kubernetes Helm chart
-- [ ] Docker Compose for production
-- [ ] Health check endpoints
 - [ ] Prometheus metrics endpoint
 
 ### Developer Experience
-- [ ] Unit tests for backend services
-- [ ] Integration tests with embedded Kafka
-- [ ] Frontend component tests
+- [ ] Unit and integration tests
 - [ ] CI/CD pipeline (GitHub Actions)
-- [ ] API documentation (Swagger/OpenAPI)
+- [ ] OpenAPI / Swagger docs (`springdoc-openapi-starter-webmvc-ui`)
 
 ---
 
@@ -123,22 +66,4 @@
 | Issue | Priority |
 |-------|----------|
 | Error breakdown shows "Unknown Error" for messages without `X-Error-Message` header | Low |
-| Pagination starts from offset 0, may miss messages with retention policy | Low |
-
----
-
-## Quick Wins
-
-- [ ] Show descriptive error messages from API responses instead of raw HTTP status codes (e.g. "Error 400") — affects Add/Edit DLQ Topic modal, Settings, and other forms
-- [ ] Add "Copy Topic Name" button
-- [ ] Add message count badge on topic cards
-- [ ] Show last message timestamp on topic list
-- [ ] Add keyboard shortcuts (R for refresh, etc.)
-- [x] Dark mode toggle
-- [ ] Remember last visited page
-
----
-
-## Contributing
-
-Feel free to pick any item from this list and submit a PR. For major features, please open an issue first to discuss the approach.
+| Pagination may miss messages near retention boundary | Low |
