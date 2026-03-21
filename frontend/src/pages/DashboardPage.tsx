@@ -10,6 +10,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { formatDate } from '../utils/date';
 
 export function DashboardPage() {
   const { data: dlqTopics, isLoading: loadingTopics, refetch } = useQuery({
@@ -198,7 +199,7 @@ export function DashboardPage() {
                         <StatusBadge status={job.status} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 text-sm">
-                        {new Date(job.createdAt).toLocaleDateString()}
+                        {formatDate(job.createdAt)}
                       </td>
                     </tr>
                   ))}

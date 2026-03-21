@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Header } from '../components/layout';
 import { dlqTopicsApi } from '../api/dlqTopics';
 import { replayApi } from '../api/replay';
@@ -19,6 +19,7 @@ import {
 
 export function DlqTopicDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [expandedMessage, setExpandedMessage] = useState<DlqMessage | null>(null);
@@ -47,6 +48,7 @@ export function DlqTopicDetailPage() {
     onSuccess: () => {
       setSelectedMessages(new Set());
       refetch();
+      queryClient.invalidateQueries({ queryKey: ['replayHistory'] });
     },
   });
 
@@ -143,18 +145,24 @@ export function DlqTopicDetailPage() {
         {/* Actions Bar */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-500 dark:text-gray-400">
-              {selectedMessages.size} selected
-            </span>
-            {selectedMessages.size > 0 && (
-              <button
-                onClick={handleReplaySelected}
-                disabled={replayMutation.isPending}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
-                <Play className="w-4 h-4" />
-                Replay Selected ({selectedMessages.size})
-              </button>
+            {selectedMessages.size === 0 ? (
+              <span className="text-sm text-gray-400 dark:text-gray-500 italic">
+                Select messages to replay them to the source topic
+              </span>
+            ) : (
+              <>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {selectedMessages.size} selected
+                </span>
+                <button
+                  onClick={handleReplaySelected}
+                  disabled={replayMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  <Play className="w-4 h-4" />
+                  Replay Selected ({selectedMessages.size})
+                </button>
+              </>
             )}
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -175,13 +183,15 @@ export function DlqTopicDetailPage() {
                     <th className="px-4 py-3 text-left">
                       <button
                         onClick={handleSelectAll}
-                        className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                        title="Select all for replay"
+                        className="flex items-center gap-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                       >
                         {selectedMessages.size === messagesData.messages.length ? (
                           <CheckSquare className="w-5 h-5" />
                         ) : (
                           <Square className="w-5 h-5" />
                         )}
+                        <span className="text-xs font-medium uppercase tracking-wider">Replay</span>
                       </button>
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Offset</th>

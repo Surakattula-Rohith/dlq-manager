@@ -277,7 +277,10 @@ function NotificationChannelsSection({ cardClass, inputClass, labelClass }: {
 
   const deleteMutation = useMutation({
     mutationFn: notificationChannelsApi.delete,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notificationChannels'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notificationChannels'] });
+      queryClient.invalidateQueries({ queryKey: ['alertRules'] });
+    },
   });
 
   const testMutation = useMutation({
@@ -354,6 +357,7 @@ function NotificationChannelsSection({ cardClass, inputClass, labelClass }: {
           onSaved={() => {
             setShowModal(false);
             queryClient.invalidateQueries({ queryKey: ['notificationChannels'] });
+            queryClient.invalidateQueries({ queryKey: ['alertRules'] });
           }}
         />
       )}

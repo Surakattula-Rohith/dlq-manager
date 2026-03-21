@@ -3,8 +3,14 @@ package com.dlqmanager.service;
 import com.dlqmanager.model.dto.RegisterDlqRequest;
 import com.dlqmanager.model.dto.UpdateDlqRequest;
 import com.dlqmanager.model.entity.DlqTopic;
+import com.dlqmanager.model.entity.AlertRule;
+import com.dlqmanager.model.entity.ReplayJob;
 import com.dlqmanager.model.enums.DlqStatus;
+import com.dlqmanager.repository.AlertEventRepository;
+import com.dlqmanager.repository.AlertRuleRepository;
 import com.dlqmanager.repository.DlqTopicRepository;
+import com.dlqmanager.repository.ReplayJobRepository;
+import com.dlqmanager.repository.ReplayMessageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,6 +31,10 @@ public class DlqDiscoveryService {
 
     private final DlqTopicRepository dlqTopicRepository;
     private final KafkaAdminService kafkaAdminService;
+    private final AlertRuleRepository alertRuleRepository;
+    private final AlertEventRepository alertEventRepository;
+    private final ReplayJobRepository replayJobRepository;
+    private final ReplayMessageRepository replayMessageRepository;
 
     /**
      * Register a new DLQ topic
@@ -147,6 +157,21 @@ public class DlqDiscoveryService {
         log.info("Deleting DLQ topic: {}", id);
 
         DlqTopic dlqTopic = getDlqTopicById(id);
+
+        // Delete alert events first, then alert rules
+        List<AlertRule> alertRules = alertRuleRepository.findByDlqTopicId(id);
+        for (AlertRule rule : alertRules) {
+            alertEventRepository.deleteByAlertRuleId(rule.getId());
+        }
+        alertRuleRepository.deleteByDlqTopicId(id);
+
+        // Delete replay messages first, then replay jobs
+        List<ReplayJob> replayJobs = replayJobRepository.findByDlqTopicId(id);
+        for (ReplayJob job : replayJobs) {
+            replayMessageRepository.deleteByReplayJobId(job.getId());
+        }
+        replayJobRepository.deleteAll(replayJobs);
+
         dlqTopicRepository.delete(dlqTopic);
 
         log.info("Successfully deleted DLQ topic: {} ({})", dlqTopic.getDlqTopicName(), id);

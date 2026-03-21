@@ -61,6 +61,11 @@
 
 ---
 
+### Data Management
+- [ ] Soft delete for DLQ topics, alert rules, and replay history (preserve audit trail instead of hard deleting)
+
+---
+
 ## Known Issues
 
 | Issue | Priority |

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Header } from '../components/layout';
 import { replayApi } from '../api/replay';
 import { CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { formatDateTime } from '../utils/date';
 
 export function ReplayHistoryPage() {
   const { data: replayJobs, isLoading, refetch } = useQuery({
@@ -144,7 +145,7 @@ export function ReplayHistoryPage() {
                         {job.initiatedBy}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {new Date(job.createdAt).toLocaleString()}
+                        {formatDateTime(job.createdAt)}
                       </td>
                     </tr>
                   ))}

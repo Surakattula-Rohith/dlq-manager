@@ -11,4 +11,6 @@ import java.util.UUID;
 public interface AlertRuleRepository extends JpaRepository<AlertRule, UUID> {
     List<AlertRule> findByEnabledTrue();
     List<AlertRule> findByDlqTopicId(UUID dlqTopicId);
+    void deleteByDlqTopicId(UUID dlqTopicId);
+    List<AlertRule> findByNotificationChannelId(UUID notificationChannelId);
 }

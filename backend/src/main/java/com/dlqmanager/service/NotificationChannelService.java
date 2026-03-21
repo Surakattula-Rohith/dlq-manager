@@ -1,11 +1,14 @@
 package com.dlqmanager.service;
 
+import com.dlqmanager.model.entity.AlertRule;
 import com.dlqmanager.model.entity.NotificationChannel;
 import com.dlqmanager.model.enums.NotificationChannelType;
+import com.dlqmanager.repository.AlertRuleRepository;
 import com.dlqmanager.repository.NotificationChannelRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
@@ -19,6 +22,7 @@ public class NotificationChannelService {
 
     private final NotificationChannelRepository notificationChannelRepository;
     private final NotificationService notificationService;
+    private final AlertRuleRepository alertRuleRepository;
 
     public List<NotificationChannel> getAll() {
         return notificationChannelRepository.findAll();
@@ -48,7 +52,14 @@ public class NotificationChannelService {
         return notificationChannelRepository.save(channel);
     }
 
+    @Transactional
     public void delete(UUID id) {
+        // Null out the FK on any alert rules referencing this channel before deleting
+        List<AlertRule> rules = alertRuleRepository.findByNotificationChannelId(id);
+        for (AlertRule rule : rules) {
+            rule.setNotificationChannel(null);
+        }
+        alertRuleRepository.saveAll(rules);
         notificationChannelRepository.deleteById(id);
     }
 

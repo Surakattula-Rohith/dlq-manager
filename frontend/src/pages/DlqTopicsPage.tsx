@@ -13,6 +13,7 @@ import {
   X
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { formatDate } from '../utils/date';
 
 export function DlqTopicsPage() {
   const queryClient = useQueryClient();
@@ -135,7 +136,7 @@ export function DlqTopicsPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400 text-sm">
-                        {new Date(topic.createdAt).toLocaleDateString()}
+                        {formatDate(topic.createdAt)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-2">
