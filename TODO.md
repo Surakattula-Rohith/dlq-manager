@@ -71,4 +71,3 @@
 | Issue | Priority |
 |-------|----------|
 | Error breakdown shows "Unknown Error" for messages without `X-Error-Message` header | Low |
-| Pagination may miss messages near retention boundary | Low |

@@ -8,11 +8,13 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * DLQ Browser Service
@@ -21,10 +23,17 @@ import java.util.*;
  *
  * Key Responsibilities:
  * 1. Create Kafka Consumer for browsing
- * 2. Implement pagination (seek to specific offset)
+ * 2. Implement pagination across ALL partitions of the topic
  * 3. Read N messages from a DLQ topic
  * 4. Convert raw Kafka messages to DlqMessageDto
  * 5. Handle errors gracefully
+ *
+ * How pagination works:
+ * - A topic is split into partitions, each with its own offsets
+ * - Kafka deletes old messages (retention), so a partition rarely starts at offset 0
+ * - We treat the topic as partition 0's messages, then partition 1's, and so on,
+ *   using each partition's real beginning offset. That lets us jump straight
+ *   to any page without reading the pages before it.
  *
  * Why a separate service?
  * - Controller handles HTTP concerns
@@ -34,6 +43,14 @@ import java.util.*;
 @Service
 @Slf4j
 public class DlqBrowserService {
+
+    private static final Duration POLL_TIMEOUT = Duration.ofSeconds(1);
+    private static final int MAX_EMPTY_POLLS = 3;
+
+    /**
+     * Upper limit for the error breakdown scan, so one huge DLQ can't hang the page.
+     */
+    private static final long MAX_BREAKDOWN_MESSAGES = 100_000;
 
     private final DlqTopicRepository dlqTopicRepository;
     private final KafkaConfigService kafkaConfigService;
@@ -51,12 +68,10 @@ public class DlqBrowserService {
      *
      * Flow:
      * 1. Look up DLQ topic in database (get topic name)
-     * 2. Create Kafka Consumer
-     * 3. Calculate starting offset based on page number
-     * 4. Seek to that offset
-     * 5. Poll messages
-     * 6. Convert to DTOs
-     * 7. Return list
+     * 2. Find all partitions and their beginning/end offsets
+     * 3. Work out which partition + offset the requested page starts at
+     * 4. Read messages from there (moving on to the next partition if needed)
+     * 5. Convert to DTOs
      *
      * @param dlqTopicId UUID of the DLQ topic in our database
      * @param page Page number (1-based)
@@ -66,123 +81,95 @@ public class DlqBrowserService {
     public List<DlqMessageDto> getMessages(UUID dlqTopicId, int page, int size) {
         log.info("Fetching messages for DLQ topic ID: {}, page: {}, size: {}", dlqTopicId, page, size);
 
-        // Step 1: Look up DLQ topic in database
-        DlqTopic dlqTopic = dlqTopicRepository.findById(dlqTopicId)
-                .orElseThrow(() -> new RuntimeException("DLQ topic not found: " + dlqTopicId));
-
+        DlqTopic dlqTopic = findDlqTopic(dlqTopicId);
         String topicName = dlqTopic.getDlqTopicName();
-        log.info("Topic name: {}", topicName);
-
-        // Step 2: Create Kafka Consumer
-        KafkaConsumer<String, String> consumer = createConsumer();
 
         List<DlqMessageDto> messages = new ArrayList<>();
+        long toSkip = (long) (page - 1) * size;
 
-        try {
-            // Step 3: Get topic partitions
-            // For MVP, we'll read from partition 0 only
-            // Future: Read from all partitions and merge
-            TopicPartition partition0 = new TopicPartition(topicName, 0);
+        try (KafkaConsumer<String, String> consumer = createConsumer()) {
+            List<TopicPartition> partitions = getPartitions(consumer, topicName);
+            if (partitions.isEmpty()) {
+                log.warn("Topic {} has no partitions (does it exist?)", topicName);
+                return messages;
+            }
 
-            // Assign consumer to this partition
-            consumer.assign(Collections.singletonList(partition0));
+            Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
+            Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
 
-            // Step 4: Calculate starting offset
-            // Page 1 → offset 0
-            // Page 2 → offset 10 (if size=10)
-            // Page 3 → offset 20
-            long startOffset = (long) (page - 1) * size;
-            log.info("Seeking to offset: {}", startOffset);
+            for (TopicPartition partition : partitions) {
+                long begin = beginningOffsets.getOrDefault(partition, 0L);
+                long end = endOffsets.getOrDefault(partition, 0L);
+                long available = end - begin;
 
-            // Step 5: Seek to the calculated offset
-            consumer.seek(partition0, startOffset);
-
-            // Step 6: Poll messages
-            // We'll poll multiple times to ensure we get enough messages
-            int messagesCollected = 0;
-            int maxPolls = 10;  // Prevent infinite loop
-            int pollCount = 0;
-
-            while (messagesCollected < size && pollCount < maxPolls) {
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(2));
-                pollCount++;
-
-                for (ConsumerRecord<String, String> record : records) {
-                    if (messagesCollected >= size) {
-                        break;  // We have enough messages
-                    }
-
-                    // Step 7: Convert to DTO
-                    DlqMessageDto dto = DlqMessageDto.fromConsumerRecord(record);
-                    messages.add(dto);
-                    messagesCollected++;
+                if (available <= 0) {
+                    continue;
                 }
 
-                if (records.isEmpty()) {
-                    log.info("No more messages available. Collected: {}", messagesCollected);
+                // Whole partition is before the requested page - skip it without reading
+                if (toSkip >= available) {
+                    toSkip -= available;
+                    continue;
+                }
+
+                long startOffset = begin + toSkip;
+                toSkip = 0;
+
+                int stillNeeded = size - messages.size();
+                readRange(consumer, partition, startOffset, end, stillNeeded,
+                        record -> messages.add(DlqMessageDto.fromConsumerRecord(record)));
+
+                if (messages.size() >= size) {
                     break;
                 }
             }
 
-            log.info("Successfully fetched {} messages", messages.size());
+            log.info("Successfully fetched {} messages from {} partition(s)", messages.size(), partitions.size());
 
         } catch (Exception e) {
             log.error("Error fetching messages from Kafka", e);
             throw new RuntimeException("Failed to fetch messages from topic: " + topicName, e);
-        } finally {
-            // IMPORTANT: Always close the consumer to release resources
-            consumer.close();
-            log.info("Kafka consumer closed");
         }
 
         return messages;
     }
 
     /**
-     * Get total message count in a DLQ topic
+     * Get total message count in a DLQ topic (all partitions)
      *
      * This is useful for pagination:
      * - Frontend needs to know total count to show "Page 1 of 5"
-     * - We seek to the end of partition to get the latest offset
+     * - For each partition: end offset - beginning offset
      *
      * @param dlqTopicId UUID of the DLQ topic
-     * @return Total number of messages in partition 0
+     * @return Total number of messages currently stored in the topic
      */
     public long getMessageCount(UUID dlqTopicId) {
         log.info("Getting message count for DLQ topic ID: {}", dlqTopicId);
 
-        DlqTopic dlqTopic = dlqTopicRepository.findById(dlqTopicId)
-                .orElseThrow(() -> new RuntimeException("DLQ topic not found: " + dlqTopicId));
-
+        DlqTopic dlqTopic = findDlqTopic(dlqTopicId);
         String topicName = dlqTopic.getDlqTopicName();
 
-        KafkaConsumer<String, String> consumer = createConsumer();
+        try (KafkaConsumer<String, String> consumer = createConsumer()) {
+            List<TopicPartition> partitions = getPartitions(consumer, topicName);
+            if (partitions.isEmpty()) {
+                return 0;
+            }
 
-        try {
-            TopicPartition partition0 = new TopicPartition(topicName, 0);
-            consumer.assign(Collections.singletonList(partition0));
+            Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
+            Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
 
-            // Seek to beginning to get earliest offset
-            consumer.seekToBeginning(Collections.singletonList(partition0));
-            long beginningOffset = consumer.position(partition0);
+            long totalMessages = 0;
+            for (TopicPartition partition : partitions) {
+                totalMessages += endOffsets.getOrDefault(partition, 0L) - beginningOffsets.getOrDefault(partition, 0L);
+            }
 
-            // Seek to end to get latest offset
-            consumer.seekToEnd(Collections.singletonList(partition0));
-            long endOffset = consumer.position(partition0);
-
-            // Total messages = end offset - beginning offset
-            long totalMessages = endOffset - beginningOffset;
-
-            log.info("Topic: {}, Beginning offset: {}, End offset: {}, Total messages: {}",
-                    topicName, beginningOffset, endOffset, totalMessages);
-
+            log.info("Topic: {}, partitions: {}, total messages: {}", topicName, partitions.size(), totalMessages);
             return totalMessages;
 
         } catch (Exception e) {
             log.error("Error getting message count", e);
             throw new RuntimeException("Failed to get message count for topic: " + topicName, e);
-        } finally {
-            consumer.close();
         }
     }
 
@@ -197,14 +184,12 @@ public class DlqBrowserService {
      * - Should we prioritize fixing error type A or B?
      *
      * How it works:
-     * 1. Read ALL messages from the topic (not paginated)
+     * 1. Read messages from every partition (not paginated)
      * 2. Extract error type from each message's X-Error-Message header
-     * 3. Group messages by error type
-     * 4. Count occurrences of each error type
-     * 5. Return Map of errorType -> count
+     * 3. Count occurrences of each error type
+     * 4. Return Map of errorType -> count
      *
-     * Note: This reads all messages, so it may be slow for very large DLQ topics.
-     * For topics with millions of messages, consider caching or sampling.
+     * Note: Stops after MAX_BREAKDOWN_MESSAGES so very large DLQs stay responsive.
      *
      * @param dlqTopicId UUID of the DLQ topic
      * @return Map where key = error type, value = count of messages with that error
@@ -212,90 +197,138 @@ public class DlqBrowserService {
     public Map<String, Long> getErrorBreakdown(UUID dlqTopicId) {
         log.info("Getting error breakdown for DLQ topic ID: {}", dlqTopicId);
 
-        // Step 1: Look up DLQ topic
-        DlqTopic dlqTopic = dlqTopicRepository.findById(dlqTopicId)
-                .orElseThrow(() -> new RuntimeException("DLQ topic not found: " + dlqTopicId));
-
+        DlqTopic dlqTopic = findDlqTopic(dlqTopicId);
         String topicName = dlqTopic.getDlqTopicName();
-        log.info("Topic name: {}", topicName);
-
-        // Step 2: Create Kafka Consumer
-        KafkaConsumer<String, String> consumer = createConsumer();
 
         Map<String, Long> errorCounts = new HashMap<>();
+        long[] totalMessagesRead = {0};
 
-        try {
-            // Step 3: Assign to partition 0
-            TopicPartition partition0 = new TopicPartition(topicName, 0);
-            consumer.assign(Collections.singletonList(partition0));
+        try (KafkaConsumer<String, String> consumer = createConsumer()) {
+            List<TopicPartition> partitions = getPartitions(consumer, topicName);
+            if (partitions.isEmpty()) {
+                return errorCounts;
+            }
 
-            // Step 4: Seek to beginning (read from start)
-            consumer.seekToBeginning(Collections.singletonList(partition0));
+            Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
+            Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
 
-            // Step 5: Read ALL messages
-            // We'll poll multiple times until we've read everything
-            boolean keepReading = true;
-            int pollCount = 0;
-            int maxPolls = 1000;  // Safety limit to prevent infinite loop
-            int totalMessagesRead = 0;
-
-            while (keepReading && pollCount < maxPolls) {
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(2));
-                pollCount++;
-
-                if (records.isEmpty()) {
-                    // No more messages available
-                    log.info("No more messages to read. Stopping.");
-                    keepReading = false;
-                } else {
-                    // Process each message
-                    for (ConsumerRecord<String, String> record : records) {
-                        totalMessagesRead++;
-
-                        // Extract error type from headers
-                        String errorType = null;
-                        for (var header : record.headers()) {
-                            if ("X-Error-Message".equals(header.key())) {
-                                errorType = new String(header.value());
-                                break;
-                            }
-                        }
-
-                        // If no error header found, classify as "Unknown"
-                        if (errorType == null || errorType.trim().isEmpty()) {
-                            errorType = "Unknown Error";
-                        }
-
-                        // Count this error type
-                        errorCounts.put(errorType, errorCounts.getOrDefault(errorType, 0L) + 1);
-                    }
+            for (TopicPartition partition : partitions) {
+                long remaining = MAX_BREAKDOWN_MESSAGES - totalMessagesRead[0];
+                if (remaining <= 0) {
+                    log.warn("Error breakdown for {} stopped at {} messages", topicName, MAX_BREAKDOWN_MESSAGES);
+                    break;
                 }
+
+                long begin = beginningOffsets.getOrDefault(partition, 0L);
+                long end = endOffsets.getOrDefault(partition, 0L);
+
+                readRange(consumer, partition, begin, end, remaining, record -> {
+                    // Extract error type from headers
+                    String errorType = null;
+                    for (var header : record.headers()) {
+                        if ("X-Error-Message".equals(header.key())) {
+                            errorType = new String(header.value());
+                            break;
+                        }
+                    }
+
+                    // If no error header found, classify as "Unknown"
+                    if (errorType == null || errorType.trim().isEmpty()) {
+                        errorType = "Unknown Error";
+                    }
+
+                    errorCounts.merge(errorType, 1L, Long::sum);
+                    totalMessagesRead[0]++;
+                });
             }
 
             log.info("Read {} messages from topic {}. Found {} distinct error types.",
-                    totalMessagesRead, topicName, errorCounts.size());
-
-            // Log the breakdown
-            errorCounts.forEach((errorType, count) ->
-                    log.info("  - {}: {} messages", errorType, count));
+                    totalMessagesRead[0], topicName, errorCounts.size());
 
         } catch (Exception e) {
             log.error("Error getting error breakdown", e);
             throw new RuntimeException("Failed to get error breakdown for topic: " + topicName, e);
-        } finally {
-            consumer.close();
         }
 
         return errorCounts;
     }
 
     /**
+     * Read messages from one partition, from startOffset up to (not including) endOffset
+     *
+     * @param consumer    consumer to use (will be re-assigned to this partition)
+     * @param partition   partition to read
+     * @param startOffset first offset to read
+     * @param endOffset   stop before this offset (the end offset captured when we started)
+     * @param limit       maximum number of messages to hand to the handler
+     * @param handler     called for every message read
+     */
+    private void readRange(KafkaConsumer<String, String> consumer,
+                           TopicPartition partition,
+                           long startOffset,
+                           long endOffset,
+                           long limit,
+                           Consumer<ConsumerRecord<String, String>> handler) {
+        if (limit <= 0 || startOffset >= endOffset) {
+            return;
+        }
+
+        consumer.assign(Collections.singletonList(partition));
+        consumer.seek(partition, startOffset);
+
+        long read = 0;
+        int emptyPolls = 0;
+
+        while (read < limit && emptyPolls < MAX_EMPTY_POLLS && consumer.position(partition) < endOffset) {
+            ConsumerRecords<String, String> records = consumer.poll(POLL_TIMEOUT);
+
+            if (records.isEmpty()) {
+                emptyPolls++;
+                continue;
+            }
+            emptyPolls = 0;
+
+            for (ConsumerRecord<String, String> record : records.records(partition)) {
+                if (record.offset() >= endOffset || read >= limit) {
+                    return;
+                }
+                handler.accept(record);
+                read++;
+            }
+        }
+    }
+
+    /**
+     * Get all partitions of a topic, sorted by partition number
+     * (sorting keeps page order stable between requests)
+     */
+    private List<TopicPartition> getPartitions(KafkaConsumer<String, String> consumer, String topicName) {
+        List<PartitionInfo> partitionInfos = consumer.partitionsFor(topicName);
+        if (partitionInfos == null) {
+            return Collections.emptyList();
+        }
+        return partitionInfos.stream()
+                .map(info -> new TopicPartition(info.topic(), info.partition()))
+                .sorted(Comparator.comparingInt(TopicPartition::partition))
+                .toList();
+    }
+
+    /**
+     * IllegalArgumentException is mapped to 404 Not Found by DlqTopicController
+     */
+    private DlqTopic findDlqTopic(UUID dlqTopicId) {
+        return dlqTopicRepository.findById(dlqTopicId)
+                .orElseThrow(() -> new IllegalArgumentException("DLQ topic not found: " + dlqTopicId));
+    }
+
+    /**
      * Create a Kafka Consumer for browsing
      *
      * Key configurations:
-     * - bootstrap.servers: Where to connect
+     * - bootstrap.servers: Where to connect (read from Settings every time)
      * - group.id: Consumer group name (separate from real consumers!)
      * - enable.auto.commit: false (we're just reading, not processing)
+     * - allow.auto.create.topics: false (looking at a topic must never create it)
      * - auto.offset.reset: earliest (start from beginning if no offset)
      * - key/value deserializers: Convert bytes back to Strings
      *
@@ -310,6 +343,7 @@ public class DlqBrowserService {
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");  // We're just browsing, don't commit offsets
+        props.put(ConsumerConfig.ALLOW_AUTO_CREATE_TOPICS_CONFIG, "false");
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");  // Start from beginning if no offset
 
         return new KafkaConsumer<>(props);
