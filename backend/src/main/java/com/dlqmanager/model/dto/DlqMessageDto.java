@@ -1,15 +1,14 @@
 package com.dlqmanager.model.dto;
 
+import com.dlqmanager.util.DlqHeaders;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.common.header.Header;
 
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -29,6 +28,8 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DlqMessageDto {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     /**
      * Message key (e.g., "ORD-78900")
@@ -59,10 +60,17 @@ public class DlqMessageDto {
     private String timestamp;
 
     /**
-     * Error message extracted from headers
+     * Error message extracted from headers (or from the payload, if the
+     * DLQ topic has an errorFieldPath configured)
      * Example: "DB Connection Timeout"
      */
     private String errorMessage;
+
+    /**
+     * Exception class that caused the failure
+     * Example: "java.sql.SQLException"
+     */
+    private String exceptionClass;
 
     /**
      * Original topic this message came from (before going to DLQ)
@@ -94,16 +102,27 @@ public class DlqMessageDto {
     /**
      * Factory method: Convert Kafka ConsumerRecord to DlqMessageDto
      *
-     * This is where the "magic" happens:
-     * 1. Extract basic Kafka metadata (partition, offset, timestamp)
-     * 2. Parse headers (convert bytes to strings)
-     * 3. Extract DLQ-specific headers (error message, retry count, etc.)
-     * 4. Parse JSON payload
-     *
      * @param record Raw Kafka ConsumerRecord
      * @return Formatted DlqMessageDto ready for API response
      */
     public static DlqMessageDto fromConsumerRecord(ConsumerRecord<String, String> record) {
+        return fromConsumerRecord(record, null);
+    }
+
+    /**
+     * Factory method: Convert Kafka ConsumerRecord to DlqMessageDto
+     *
+     * This is where the "magic" happens:
+     * 1. Extract basic Kafka metadata (partition, offset, timestamp)
+     * 2. Parse headers (convert bytes to strings)
+     * 3. Extract DLQ-specific headers (supports custom X-*, Spring Kafka and Kafka Connect headers)
+     * 4. Parse JSON payload
+     *
+     * @param record Raw Kafka ConsumerRecord
+     * @param errorFieldPath optional JSON path (e.g. "error.message") to read the error from the payload
+     * @return Formatted DlqMessageDto ready for API response
+     */
+    public static DlqMessageDto fromConsumerRecord(ConsumerRecord<String, String> record, String errorFieldPath) {
         DlqMessageDto dto = new DlqMessageDto();
 
         // Basic Kafka metadata
@@ -112,35 +131,35 @@ public class DlqMessageDto {
         dto.setOffset(record.offset());
         dto.setTimestamp(Instant.ofEpochMilli(record.timestamp()).toString());
 
-        // Parse headers (convert from byte[] to String)
-        Map<String, String> headersMap = new HashMap<>();
-        for (Header header : record.headers()) {
-            String key = header.key();
-            String value = new String(header.value());  // byte[] → String
-            headersMap.put(key, value);
-        }
+        // Parse headers (convert from byte[] to String, null-safe)
+        Map<String, String> headersMap = DlqHeaders.toMap(record.headers());
         dto.setHeaders(headersMap);
 
         // Extract DLQ-specific headers
-        dto.setErrorMessage(headersMap.get("X-Error-Message"));
-        dto.setOriginalTopic(headersMap.get("X-Original-Topic"));
-        dto.setConsumerGroup(headersMap.get("X-Consumer-Group"));
+        String errorMessage = DlqHeaders.firstValue(headersMap, DlqHeaders.ERROR_MESSAGE);
+        if (errorMessage == null) {
+            errorMessage = DlqHeaders.readJsonField(record.value(), errorFieldPath);
+        }
+        dto.setErrorMessage(errorMessage);
+        dto.setExceptionClass(DlqHeaders.firstValue(headersMap, DlqHeaders.EXCEPTION_CLASS));
+        dto.setOriginalTopic(DlqHeaders.firstValue(headersMap, DlqHeaders.ORIGINAL_TOPIC));
+        dto.setConsumerGroup(DlqHeaders.firstValue(headersMap, DlqHeaders.CONSUMER_GROUP));
 
         // Parse retry count (String → Integer)
-        String retryCountStr = headersMap.get("X-Retry-Count");
+        String retryCountStr = DlqHeaders.firstValue(headersMap, DlqHeaders.RETRY_COUNT);
         if (retryCountStr != null) {
             try {
-                dto.setRetryCount(Integer.parseInt(retryCountStr));
+                dto.setRetryCount(Integer.parseInt(retryCountStr.trim()));
             } catch (NumberFormatException e) {
                 dto.setRetryCount(null);
             }
         }
 
         // Parse failed timestamp (epoch millis String → ISO-8601)
-        String failedTimestampStr = headersMap.get("X-Failed-Timestamp");
+        String failedTimestampStr = DlqHeaders.firstValue(headersMap, DlqHeaders.FAILED_TIMESTAMP);
         if (failedTimestampStr != null) {
             try {
-                long epochMillis = Long.parseLong(failedTimestampStr);
+                long epochMillis = Long.parseLong(failedTimestampStr.trim());
                 dto.setFailedTimestamp(Instant.ofEpochMilli(epochMillis).toString());
             } catch (NumberFormatException e) {
                 dto.setFailedTimestamp(null);
@@ -149,13 +168,11 @@ public class DlqMessageDto {
 
         // Parse JSON payload (String → JsonNode)
         try {
-            ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode jsonPayload = objectMapper.readTree(record.value());
+            JsonNode jsonPayload = OBJECT_MAPPER.readTree(record.value());
             dto.setPayload(jsonPayload);
         } catch (Exception e) {
             // If payload is not valid JSON, store as text node
-            ObjectMapper objectMapper = new ObjectMapper();
-            dto.setPayload(objectMapper.valueToTree(record.value()));
+            dto.setPayload(OBJECT_MAPPER.valueToTree(record.value()));
         }
 
         return dto;

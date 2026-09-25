@@ -68,6 +68,4 @@
 
 ## Known Issues
 
-| Issue | Priority |
-|-------|----------|
-| Error breakdown shows "Unknown Error" for messages without `X-Error-Message` header | Low |
+None open right now.

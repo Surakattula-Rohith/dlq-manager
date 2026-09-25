@@ -1,5 +1,6 @@
 package com.dlqmanager.service;
 
+import com.dlqmanager.util.DlqHeaders;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -128,6 +129,8 @@ public class ReplayProducer {
      * - X-Exception-Class: Java exception, not relevant
      * - X-Failed-Timestamp: When it failed, not relevant
      * - X-Consumer-Group: Original consumer, might be different now
+     * - kafka_dlt-*: Spring Kafka DLQ metadata (includes full stack traces)
+     * - __connect.errors.*: Kafka Connect DLQ metadata
      *
      * Headers to KEEP:
      * - X-Original-Topic: Useful for tracking message origin
@@ -143,20 +146,12 @@ public class ReplayProducer {
     private List<Header> prepareHeaders(List<Header> originalHeaders) {
         List<Header> cleanedHeaders = new ArrayList<>();
 
-        // List of header keys to remove
-        List<String> headersToRemove = List.of(
-                "X-Error-Message",
-                "X-Retry-Count",
-                "X-Exception-Class",
-                "X-Failed-Timestamp",
-                "X-Consumer-Group"
-        );
-
         // Copy original headers except the ones we want to remove
+        // (X-* DLQ headers, plus everything Spring Kafka / Kafka Connect add - see DlqHeaders)
         if (originalHeaders != null) {
             for (Header header : originalHeaders) {
                 String headerKey = header.key();
-                if (!headersToRemove.contains(headerKey)) {
+                if (!DlqHeaders.isDlqOnlyHeader(headerKey)) {
                     cleanedHeaders.add(header);
                     log.debug("Keeping header: {}", headerKey);
                 } else {

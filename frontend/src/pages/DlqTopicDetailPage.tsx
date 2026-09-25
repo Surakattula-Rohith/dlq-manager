@@ -237,7 +237,7 @@ export function DlqTopicDetailPage() {
                           <div className="flex items-center gap-2">
                             <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
                             <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
-                              {message.errorMessage || 'Unknown error'}
+                              {message.errorMessage || message.exceptionClass || 'Unknown error'}
                             </span>
                           </div>
                         </td>

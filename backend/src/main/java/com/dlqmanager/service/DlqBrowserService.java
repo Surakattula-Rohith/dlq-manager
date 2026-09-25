@@ -3,6 +3,7 @@ package com.dlqmanager.service;
 import com.dlqmanager.model.dto.DlqMessageDto;
 import com.dlqmanager.model.entity.DlqTopic;
 import com.dlqmanager.repository.DlqTopicRepository;
+import com.dlqmanager.util.DlqHeaders;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -117,7 +118,7 @@ public class DlqBrowserService {
 
                 int stillNeeded = size - messages.size();
                 readRange(consumer, partition, startOffset, end, stillNeeded,
-                        record -> messages.add(DlqMessageDto.fromConsumerRecord(record)));
+                        record -> messages.add(DlqMessageDto.fromConsumerRecord(record, dlqTopic.getErrorFieldPath())));
 
                 if (messages.size() >= size) {
                     break;
@@ -185,7 +186,8 @@ public class DlqBrowserService {
      *
      * How it works:
      * 1. Read messages from every partition (not paginated)
-     * 2. Extract error type from each message's X-Error-Message header
+     * 2. Work out the error type (custom X-* headers, Spring Kafka headers,
+     *    Kafka Connect headers, or the topic's errorFieldPath in the payload)
      * 3. Count occurrences of each error type
      * 4. Return Map of errorType -> count
      *
@@ -199,6 +201,7 @@ public class DlqBrowserService {
 
         DlqTopic dlqTopic = findDlqTopic(dlqTopicId);
         String topicName = dlqTopic.getDlqTopicName();
+        String errorFieldPath = dlqTopic.getErrorFieldPath();
 
         Map<String, Long> errorCounts = new HashMap<>();
         long[] totalMessagesRead = {0};
@@ -223,20 +226,8 @@ public class DlqBrowserService {
                 long end = endOffsets.getOrDefault(partition, 0L);
 
                 readRange(consumer, partition, begin, end, remaining, record -> {
-                    // Extract error type from headers
-                    String errorType = null;
-                    for (var header : record.headers()) {
-                        if ("X-Error-Message".equals(header.key())) {
-                            errorType = new String(header.value());
-                            break;
-                        }
-                    }
-
-                    // If no error header found, classify as "Unknown"
-                    if (errorType == null || errorType.trim().isEmpty()) {
-                        errorType = "Unknown Error";
-                    }
-
+                    Map<String, String> headers = DlqHeaders.toMap(record.headers());
+                    String errorType = DlqHeaders.resolveErrorType(headers, record.value(), errorFieldPath);
                     errorCounts.merge(errorType, 1L, Long::sum);
                     totalMessagesRead[0]++;
                 });
