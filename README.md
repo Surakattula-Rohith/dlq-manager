@@ -1,8 +1,8 @@
 # Kafka DLQ Manager
 
-![Java](https://img.shields.io/badge/Java-17%2B-blue)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen)
-![React](https://img.shields.io/badge/React-18-61DAFB)
+![Java](https://img.shields.io/badge/Java-21%2B-blue)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-brightgreen)
+![React](https://img.shields.io/badge/React-19-61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.x-06B6D4)
 ![Kafka](https://img.shields.io/badge/Apache%20Kafka-3.x-orange)
@@ -57,9 +57,9 @@ Threshold and time-window alert rules per DLQ topic. Alert history with Acknowle
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS 4 |
+| Frontend | React 19, TypeScript, Vite 7, Tailwind CSS 4 |
 | State | TanStack Query, React Router, Axios |
-| Backend | Java 17, Spring Boot 3.x, Spring Data JPA |
+| Backend | Java 21, Spring Boot 3.5, Spring Data JPA |
 | Messaging | Apache Kafka Client (consumer + producer) |
 | Database | PostgreSQL 15 |
 | Infra | Docker Compose |
@@ -68,18 +68,18 @@ Threshold and time-window alert rules per DLQ topic. Alert history with Acknowle
 
 ## Quick Start
 
-**Prerequisites:** Docker, Java 17+, Node.js 18+
+**Prerequisites:** Docker, Java 21+, Node.js 20.19+
 
 ```bash
 # 1. Start infrastructure (Kafka + PostgreSQL)
 git clone https://github.com/Surakattula-Rohith/dlq-manager.git
 cd dlq-manager
-docker-compose up -d
+docker compose up -d
 
 # 2. Start backend
 cd backend && ./mvnw spring-boot:run      # http://localhost:8080
 
-# 3. Start frontend
+# 3. Start frontend (in a second terminal, from the project root)
 cd frontend && npm install && npm run dev  # http://localhost:5173
 ```
 
