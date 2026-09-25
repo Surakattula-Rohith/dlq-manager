@@ -1,6 +1,8 @@
 package com.dlqmanager.service;
 
+import com.dlqmanager.config.KafkaProducerConfig;
 import com.dlqmanager.util.DlqHeaders;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -10,6 +12,7 @@ import org.apache.kafka.common.header.internals.RecordHeader;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +29,7 @@ import java.util.concurrent.TimeoutException;
  * - Handle errors gracefully
  * - Add replay marker headers
  * - Synchronous send with timeout
+ * - Always send to the cluster currently configured in Settings
  *
  * Why a separate service?
  * - Encapsulates Kafka producer complexity
@@ -37,16 +41,19 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class ReplayProducer {
 
-    private final KafkaProducer<String, String> kafkaProducer;
+    private final KafkaProducerConfig kafkaProducerConfig;
+    private final KafkaConfigService kafkaConfigService;
 
     /**
-     * Constructor injection
-     * Spring automatically injects the kafkaProducer bean from KafkaProducerConfig
-     *
-     * @param kafkaProducer configured KafkaProducer instance
+     * Current producer and the bootstrap servers it was created for.
+     * Rebuilt when the servers change in Settings.
      */
-    public ReplayProducer(KafkaProducer<String, String> kafkaProducer) {
-        this.kafkaProducer = kafkaProducer;
+    private KafkaProducer<String, String> kafkaProducer;
+    private String producerBootstrapServers;
+
+    public ReplayProducer(KafkaProducerConfig kafkaProducerConfig, KafkaConfigService kafkaConfigService) {
+        this.kafkaProducerConfig = kafkaProducerConfig;
+        this.kafkaConfigService = kafkaConfigService;
     }
 
     /**
@@ -85,7 +92,7 @@ public class ReplayProducer {
 
         try {
             // Step 3: Send message (returns Future immediately)
-            Future<RecordMetadata> future = kafkaProducer.send(record);
+            Future<RecordMetadata> future = currentProducer().send(record);
 
             // Step 4: Block and wait for result (synchronous)
             // Timeout: 30 seconds (matches producer config)
@@ -113,6 +120,27 @@ public class ReplayProducer {
             log.error("Timeout sending message to topic: {}, key: {}", topic, key, e);
             throw new Exception("Kafka send timeout after 30 seconds", e);
         }
+    }
+
+    /**
+     * Get a producer for the bootstrap servers currently saved in Settings.
+     * If the servers changed since the last replay, the old producer is closed
+     * and a new one is created, so replays never go to the previous cluster.
+     */
+    private synchronized KafkaProducer<String, String> currentProducer() {
+        String bootstrapServers = kafkaConfigService.getBootstrapServers();
+
+        if (kafkaProducer == null || !bootstrapServers.equals(producerBootstrapServers)) {
+            if (kafkaProducer != null) {
+                log.info("Kafka bootstrap servers changed from {} to {}, recreating producer",
+                        producerBootstrapServers, bootstrapServers);
+                kafkaProducer.close(Duration.ofSeconds(5));
+            }
+            kafkaProducer = kafkaProducerConfig.createProducer(bootstrapServers);
+            producerBootstrapServers = bootstrapServers;
+        }
+
+        return kafkaProducer;
     }
 
     /**
@@ -173,17 +201,19 @@ public class ReplayProducer {
     }
 
     /**
-     * Flush and close the producer (for graceful shutdown)
-     * Should be called when application stops
+     * Flush and close the producer (graceful shutdown)
+     * Spring calls this automatically when the application stops
      *
      * Flush: Wait for all pending sends to complete
      * Close: Release resources (network connections, threads)
      */
-    public void close() {
+    @PreDestroy
+    public synchronized void close() {
         log.info("Closing Kafka producer...");
         if (kafkaProducer != null) {
             kafkaProducer.flush(); // Wait for pending sends
             kafkaProducer.close(); // Clean up resources
+            kafkaProducer = null;
         }
         log.info("Kafka producer closed successfully");
     }
