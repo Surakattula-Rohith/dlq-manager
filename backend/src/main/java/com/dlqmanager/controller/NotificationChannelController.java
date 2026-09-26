@@ -62,6 +62,8 @@ public class NotificationChannelController {
             response.put("success", true);
             response.put("channel", toMap(channel));
             return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return badRequest(e.getMessage());
         } catch (Exception e) {
             return errorResponse(e.getMessage());
         }
@@ -81,6 +83,8 @@ public class NotificationChannelController {
             response.put("success", true);
             response.put("channel", toMap(channel));
             return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return badRequest(e.getMessage());
         } catch (Exception e) {
             return errorResponse(e.getMessage());
         }
@@ -108,7 +112,7 @@ public class NotificationChannelController {
         m.put("id", channel.getId().toString());
         m.put("name", channel.getName());
         m.put("type", channel.getType().name());
-        m.put("configuration", channel.getConfiguration());
+        m.put("configuration", notificationChannelService.maskedConfiguration(channel)); // webhook URL is a secret
         m.put("enabled", channel.isEnabled());
         m.put("createdAt", channel.getCreatedAt() != null ? channel.getCreatedAt().toString() : null);
         m.put("updatedAt", channel.getUpdatedAt() != null ? channel.getUpdatedAt().toString() : null);
