@@ -14,6 +14,21 @@
 
 ---
 
+## v4.1 — Production Hardening ✓
+
+- [x] Browse, count and analyze messages across all partitions
+- [x] Paging stays correct after retention removes old messages
+- [x] Recognize Spring Kafka and Kafka Connect DLQ headers
+- [x] Replayed-message tracking, duplicate replay protection, pending count
+- [x] Failed replays kept in the audit trail
+- [x] Replays follow Kafka settings changes without restart
+- [x] Snooze silences alerts; time windows use real history
+- [x] Mask Slack webhook URLs and restrict them to hooks.slack.com
+- [x] Ports and credentials via environment variables
+- [x] Dashboard shows live firing-alert count
+
+---
+
 ## v5.0 — Authentication & RBAC
 
 - [ ] User authentication (username/password or OAuth)

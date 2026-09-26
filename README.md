@@ -51,6 +51,17 @@ Full dark mode across every page, input, table, modal, and card. Persisted acros
 **v4.0 — Alerting & Notifications**
 Threshold and time-window alert rules per DLQ topic. Alert history with Acknowledge and Snooze actions. Cooldown support to prevent alert spam. Slack notifications via incoming webhooks.
 
+**v4.1 — Production Hardening**
+Made the tool behave correctly on real Kafka setups, not just demo data:
+- Reads **every partition** of a DLQ, and paging stays correct after Kafka retention removes old messages
+- Understands the DLQ headers written by **Spring Kafka** (`kafka_dlt-*`) and **Kafka Connect** (`__connect.errors.*`), plus an optional JSON error field
+- Tracks which messages were already **replayed** — shown with a badge, blocked from accidental duplicate replays, and excluded from the new **pending** count
+- Failed replays are always kept in the audit trail; bulk replay reuses a single consumer
+- Replays follow Kafka settings changes without a restart
+- Alerts: snooze actually silences, time windows measure the real window, and threshold alerts use the pending count
+- Slack webhook URLs are masked in the API and only `hooks.slack.com` addresses are accepted
+- Ports and credentials configurable through environment variables
+
 ---
 
 ## Tech Stack
@@ -202,6 +213,7 @@ Backend variables: `SERVER_PORT`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAFKA
 - [x] v2.0 — Dynamic Kafka configuration from UI
 - [x] v3.0 — Dark mode
 - [x] v4.0 — Alerting with Slack notifications
+- [x] v4.1 — Production hardening (partitions, real-world headers, replay safety, alert fixes)
 - [ ] v5.0 — Authentication & RBAC
 - [ ] v6.0 — Multi-cluster support
 

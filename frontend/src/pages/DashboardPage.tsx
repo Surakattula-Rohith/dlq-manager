@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Header } from '../components/layout';
 import { dlqTopicsApi } from '../api/dlqTopics';
 import { replayApi } from '../api/replay';
+import { alertsApi } from '../api/alerts';
 import {
   Inbox,
   AlertTriangle,
@@ -23,6 +24,13 @@ export function DashboardPage() {
     queryFn: replayApi.getHistory,
   });
 
+  // Same query key as the Alerts page, so both share the cached result
+  const { data: alertEvents } = useQuery({
+    queryKey: ['alertEvents'],
+    queryFn: alertsApi.getEvents,
+    refetchInterval: 30_000,
+  });
+
   const isLoading = loadingTopics || loadingHistory;
 
   const stats = {
@@ -30,6 +38,7 @@ export function DashboardPage() {
     activeTopics: dlqTopics?.filter(t => t.status === 'ACTIVE').length || 0,
     totalReplays: replayHistory?.length || 0,
     successfulReplays: replayHistory?.filter(r => r.status === 'COMPLETED').length || 0,
+    firingAlerts: alertEvents?.firingCount ?? 0,
   };
 
   const cardClass = "bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700";
@@ -72,8 +81,8 @@ export function DashboardPage() {
           />
           <SummaryCard
             title="Active Alerts"
-            value={0}
-            subtitle="Coming in Phase 4"
+            value={stats.firingAlerts}
+            subtitle={stats.firingAlerts > 0 ? 'Firing right now' : 'All quiet'}
             icon={AlertTriangle}
             iconColor="text-orange-500"
             bgColor="bg-orange-50 dark:bg-orange-900/20"
