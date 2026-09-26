@@ -248,7 +248,7 @@ const [bootstrapServers, setBootstrapServers] = useState('');
         </div>
 
         {/* Notification Channels */}
-        <NotificationChannelsSection cardClass={cardClass} inputClass={inputClass} labelClass={labelClass} />
+        <NotificationChannelsSection cardClass={cardClass} />
       </div>
     </div>
   );
@@ -261,9 +261,7 @@ const labelClass2 = 'block text-sm font-medium text-gray-700 dark:text-gray-300 
 
 const CHANNEL_ICONS: Record<string, string> = { SLACK: '💬' };
 
-function NotificationChannelsSection({ cardClass, inputClass, labelClass }: {
-  cardClass: string; inputClass: string; labelClass: string;
-}) {
+function NotificationChannelsSection({ cardClass }: { cardClass: string }) {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<NotificationChannel | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; message?: string; error?: string }>>({});
