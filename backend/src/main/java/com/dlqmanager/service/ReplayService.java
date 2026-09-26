@@ -20,7 +20,6 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -43,10 +42,19 @@ import java.util.*;
  * 5. Update ReplayJob status (COMPLETED/FAILED)
  * 6. Create ReplayMessage record with result
  * 7. Return ReplayJobDto to caller
+ *
+ * Why no @Transactional here?
+ * - The replay records are our audit trail
+ * - If the whole method ran in one transaction, a failed replay would roll back
+ *   the FAILED job record too, and failures would never show up in Replay History
+ * - Each save() commits on its own, so success AND failure are always recorded
  */
 @Service
 @Slf4j
 public class ReplayService {
+
+    private static final Duration POLL_TIMEOUT = Duration.ofSeconds(2);
+    private static final int MAX_POLL_ATTEMPTS = 3;
 
     private final DlqTopicRepository dlqTopicRepository;
     private final ReplayJobRepository replayJobRepository;
@@ -83,7 +91,6 @@ public class ReplayService {
      * @return ReplayJobDto with job details and status
      * @throws RuntimeException if DLQ not found or replay fails
      */
-    @Transactional
     public ReplayJobDto replayMessage(ReplayRequestDto request) {
         log.info("Starting single message replay for DLQ topic ID: {}, offset: {}, partition: {}",
                 request.getDlqTopicId(), request.getMessageOffset(), request.getMessagePartition());
@@ -105,7 +112,7 @@ public class ReplayService {
         replayJob = replayJobRepository.save(replayJob);
         log.info("Created replay job with ID: {}", replayJob.getId());
 
-        try {
+        try (KafkaConsumer<String, String> consumer = createConsumer()) {
             // Step 3: Update status to RUNNING
             replayJob.setStatus(ReplayStatus.RUNNING);
             replayJob.setStartedAt(LocalDateTime.now());
@@ -116,6 +123,7 @@ public class ReplayService {
                     dlqTopic.getDlqTopicName(), request.getMessageOffset(), request.getMessagePartition());
 
             ConsumerRecord<String, String> record = readMessageFromDlq(
+                    consumer,
                     dlqTopic.getDlqTopicName(),
                     request.getMessagePartition(),
                     request.getMessageOffset()
@@ -151,36 +159,35 @@ public class ReplayService {
             replayJob = replayJobRepository.save(replayJob);
 
             // Step 7: Create ReplayMessage record - SUCCESS
-            ReplayMessage replayMessage = new ReplayMessage();
-            replayMessage.setReplayJob(replayJob);
-            replayMessage.setMessageKey(record.key());
-            replayMessage.setDlqOffset(record.offset());
-            replayMessage.setDlqPartition(record.partition());
-            replayMessage.setStatus(ReplayMessageStatus.SUCCESS);
-            replayMessage.setReplayedAt(LocalDateTime.now());
-            replayMessageRepository.save(replayMessage);
+            createReplayMessageRecord(
+                    replayJob,
+                    record.key(),
+                    record.offset(),
+                    record.partition(),
+                    ReplayMessageStatus.SUCCESS,
+                    null
+            );
 
             log.info("Replay job completed successfully: {}", replayJob.getId());
 
         } catch (Exception e) {
             log.error("Replay failed for job: {}", replayJob.getId(), e);
 
-            // Update job status - FAILED
+            // Update job status - FAILED (committed on its own, so it stays in the audit trail)
             replayJob.setFailed(1);
             replayJob.setStatus(ReplayStatus.FAILED);
             replayJob.setCompletedAt(LocalDateTime.now());
             replayJob = replayJobRepository.save(replayJob);
 
             // Create ReplayMessage record - FAILED
-            ReplayMessage replayMessage = new ReplayMessage();
-            replayMessage.setReplayJob(replayJob);
-            replayMessage.setMessageKey(null);  // We might not know the key if read failed
-            replayMessage.setDlqOffset(request.getMessageOffset());
-            replayMessage.setDlqPartition(request.getMessagePartition());
-            replayMessage.setStatus(ReplayMessageStatus.FAILED);
-            replayMessage.setErrorMessage(e.getMessage());
-            replayMessage.setReplayedAt(LocalDateTime.now());
-            replayMessageRepository.save(replayMessage);
+            createReplayMessageRecord(
+                    replayJob,
+                    null,  // We might not know the key if read failed
+                    request.getMessageOffset(),
+                    request.getMessagePartition(),
+                    ReplayMessageStatus.FAILED,
+                    e.getMessage()
+            );
 
             throw new RuntimeException("Failed to replay message: " + e.getMessage(), e);
         }
@@ -195,7 +202,7 @@ public class ReplayService {
      * Flow:
      * 1. Validate: DLQ topic exists
      * 2. Create: ReplayJob for N messages
-     * 3. Loop: For each message
+     * 3. Loop: For each message (one Kafka consumer is reused for all of them)
      *    a. Read from DLQ
      *    b. Send to source topic
      *    c. Record success/failure
@@ -211,7 +218,6 @@ public class ReplayService {
      * @return ReplayJobDto with overall results
      * @throws RuntimeException if DLQ not found
      */
-    @Transactional
     public ReplayJobDto bulkReplayMessages(BulkReplayRequestDto request) {
         log.info("Starting bulk replay for DLQ topic ID: {}, message count: {}",
                 request.getDlqTopicId(), request.getMessages().size());
@@ -242,19 +248,62 @@ public class ReplayService {
         int failureCount = 0;
 
         // Step 4: Process each message
-        for (BulkReplayRequestDto.MessageIdentifier msgId : request.getMessages()) {
-            log.info("Processing message: offset={}, partition={}", msgId.getOffset(), msgId.getPartition());
+        try (KafkaConsumer<String, String> consumer = createConsumer()) {
+            for (BulkReplayRequestDto.MessageIdentifier msgId : request.getMessages()) {
+                log.info("Processing message: offset={}, partition={}", msgId.getOffset(), msgId.getPartition());
 
-            try {
-                // Read message from DLQ
-                ConsumerRecord<String, String> record = readMessageFromDlq(
-                        dlqTopic.getDlqTopicName(),
-                        msgId.getPartition(),
-                        msgId.getOffset()
-                );
+                try {
+                    // Read message from DLQ
+                    ConsumerRecord<String, String> record = readMessageFromDlq(
+                            consumer,
+                            dlqTopic.getDlqTopicName(),
+                            msgId.getPartition(),
+                            msgId.getOffset()
+                    );
 
-                if (record == null) {
-                    log.warn("Message not found at offset: {}, partition: {}", msgId.getOffset(), msgId.getPartition());
+                    if (record == null) {
+                        log.warn("Message not found at offset: {}, partition: {}", msgId.getOffset(), msgId.getPartition());
+                        failureCount++;
+
+                        // Record failure
+                        createReplayMessageRecord(
+                                replayJob,
+                                null,
+                                msgId.getOffset(),
+                                msgId.getPartition(),
+                                ReplayMessageStatus.FAILED,
+                                "Message not found at offset: " + msgId.getOffset()
+                        );
+                        continue;
+                    }
+
+                    // Send message to source topic
+                    List<Header> headers = new ArrayList<>();
+                    record.headers().forEach(headers::add);
+
+                    RecordMetadata metadata = replayProducer.sendMessage(
+                            dlqTopic.getSourceTopic(),
+                            record.key(),
+                            record.value(),
+                            headers
+                    );
+
+                    log.info("Message replayed successfully. Key: {}, Offset: {}", record.key(), metadata.offset());
+                    successCount++;
+
+                    // Record success
+                    createReplayMessageRecord(
+                            replayJob,
+                            record.key(),
+                            record.offset(),
+                            record.partition(),
+                            ReplayMessageStatus.SUCCESS,
+                            null
+                    );
+
+                } catch (Exception e) {
+                    log.error("Failed to replay message at offset: {}, partition: {}",
+                            msgId.getOffset(), msgId.getPartition(), e);
                     failureCount++;
 
                     // Record failure
@@ -264,49 +313,9 @@ public class ReplayService {
                             msgId.getOffset(),
                             msgId.getPartition(),
                             ReplayMessageStatus.FAILED,
-                            "Message not found at offset: " + msgId.getOffset()
+                            e.getMessage()
                     );
-                    continue;
                 }
-
-                // Send message to source topic
-                List<Header> headers = new ArrayList<>();
-                record.headers().forEach(headers::add);
-
-                RecordMetadata metadata = replayProducer.sendMessage(
-                        dlqTopic.getSourceTopic(),
-                        record.key(),
-                        record.value(),
-                        headers
-                );
-
-                log.info("Message replayed successfully. Key: {}, Offset: {}", record.key(), metadata.offset());
-                successCount++;
-
-                // Record success
-                createReplayMessageRecord(
-                        replayJob,
-                        record.key(),
-                        record.offset(),
-                        record.partition(),
-                        ReplayMessageStatus.SUCCESS,
-                        null
-                );
-
-            } catch (Exception e) {
-                log.error("Failed to replay message at offset: {}, partition: {}",
-                        msgId.getOffset(), msgId.getPartition(), e);
-                failureCount++;
-
-                // Record failure
-                createReplayMessageRecord(
-                        replayJob,
-                        null,
-                        msgId.getOffset(),
-                        msgId.getPartition(),
-                        ReplayMessageStatus.FAILED,
-                        e.getMessage()
-                );
             }
         }
 
@@ -326,7 +335,7 @@ public class ReplayService {
 
     /**
      * Helper method to create ReplayMessage record
-     * Extracted to avoid code duplication in bulk replay
+     * Extracted to avoid code duplication
      *
      * @param replayJob parent replay job
      * @param messageKey Kafka message key (can be null)
@@ -358,45 +367,40 @@ public class ReplayService {
      * Read a specific message from DLQ topic
      *
      * How it works:
-     * 1. Create Kafka consumer
-     * 2. Assign to specific partition
-     * 3. Seek to exact offset
-     * 4. Poll once to get the message
-     * 5. Close consumer
+     * 1. Assign the consumer to the specific partition
+     * 2. Seek to exact offset
+     * 3. Poll until we see that offset (or pass it)
      *
+     * @param consumer consumer to use (reused across a bulk replay)
      * @param topicName topic to read from
      * @param partition partition number
      * @param offset exact offset to read
      * @return ConsumerRecord at that position, or null if not found
      */
-    private ConsumerRecord<String, String> readMessageFromDlq(String topicName, int partition, long offset) {
-        KafkaConsumer<String, String> consumer = createConsumer();
+    private ConsumerRecord<String, String> readMessageFromDlq(KafkaConsumer<String, String> consumer,
+                                                              String topicName, int partition, long offset) {
+        TopicPartition topicPartition = new TopicPartition(topicName, partition);
+        consumer.assign(Collections.singletonList(topicPartition));
 
-        try {
-            // Assign to specific partition
-            TopicPartition topicPartition = new TopicPartition(topicName, partition);
-            consumer.assign(Collections.singletonList(topicPartition));
+        // Seek to the exact offset
+        consumer.seek(topicPartition, offset);
 
-            // Seek to the exact offset
-            consumer.seek(topicPartition, offset);
+        for (int attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+            ConsumerRecords<String, String> records = consumer.poll(POLL_TIMEOUT);
 
-            // Poll to get the message
-            // We only need one message, so poll once with short timeout
-            ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(5));
-
-            // Find the record at the exact offset
-            for (ConsumerRecord<String, String> record : records) {
-                if (record.offset() == offset && record.partition() == partition) {
+            for (ConsumerRecord<String, String> record : records.records(topicPartition)) {
+                if (record.offset() == offset) {
                     return record;
                 }
+                if (record.offset() > offset) {
+                    // The offset no longer exists (e.g. removed by retention)
+                    return null;
+                }
             }
-
-            // Message not found
-            return null;
-
-        } finally {
-            consumer.close();
         }
+
+        // Message not found
+        return null;
     }
 
     /**
@@ -412,6 +416,7 @@ public class ReplayService {
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+        props.put(ConsumerConfig.ALLOW_AUTO_CREATE_TOPICS_CONFIG, "false");
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 
         return new KafkaConsumer<>(props);
