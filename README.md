@@ -85,6 +85,16 @@ cd frontend && npm install && npm run dev  # http://localhost:5173
 
 Then go to **Settings**, enter your Kafka bootstrap servers, click **Test Connection**, and **Save**.
 
+**Ports already in use?** Every default can be changed with an environment variable:
+
+```bash
+POSTGRES_PORT=5433 docker compose up -d
+cd backend && SERVER_PORT=8081 DB_URL='jdbc:postgresql://localhost:5433/dlqmanager' ./mvnw spring-boot:run
+cd frontend && FRONTEND_PORT=5174 BACKEND_URL=http://localhost:8081 npm run dev
+```
+
+Backend variables: `SERVER_PORT`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS`, `SHOW_SQL`, `LOG_LEVEL`.
+
 ---
 
 ## Screenshots
