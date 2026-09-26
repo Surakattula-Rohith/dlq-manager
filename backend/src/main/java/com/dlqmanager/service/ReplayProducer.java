@@ -59,6 +59,21 @@ public class ReplayProducer {
     /**
      * Send a message to a Kafka topic (synchronous)
      *
+     * @param topic           destination topic name (e.g., "orders")
+     * @param key             message key (e.g., "ORD-12345"), can be null
+     * @param value           message payload (JSON string)
+     * @param originalHeaders headers from DLQ message
+     * @return RecordMetadata containing partition and offset where message was stored
+     * @throws Exception if sending fails (timeout, broker error, serialization error)
+     */
+    public RecordMetadata sendMessage(String topic, String key, String value, List<Header> originalHeaders)
+            throws Exception {
+        return sendMessage(topic, key, value, originalHeaders, null);
+    }
+
+    /**
+     * Send a message to a Kafka topic (synchronous)
+     *
      * Flow:
      * 1. Create ProducerRecord with topic, key, value, headers
      * 2. Send to Kafka (async by default)
@@ -70,16 +85,17 @@ public class ReplayProducer {
      * @param key           message key (e.g., "ORD-12345"), can be null
      * @param value         message payload (JSON string)
      * @param originalHeaders headers from DLQ message
+     * @param replayedBy      who started the replay (added as X-Replayed-By), can be null
      * @return RecordMetadata containing partition and offset where message was stored
      * @throws Exception if sending fails (timeout, broker error, serialization error)
      */
-    public RecordMetadata sendMessage(String topic, String key, String value, List<Header> originalHeaders)
-            throws Exception {
+    public RecordMetadata sendMessage(String topic, String key, String value,
+                                      List<Header> originalHeaders, String replayedBy) throws Exception {
 
         log.info("Sending message to topic: {}, key: {}", topic, key);
 
         // Step 1: Prepare headers
-        List<Header> headers = prepareHeaders(originalHeaders);
+        List<Header> headers = prepareHeaders(originalHeaders, replayedBy);
 
         // Step 2: Create ProducerRecord
         ProducerRecord<String, String> record = new ProducerRecord<>(
@@ -166,12 +182,13 @@ public class ReplayProducer {
      *
      * Headers to ADD:
      * - X-Replayed-At: Timestamp when replayed (ISO 8601 format)
-     * - X-Replayed-By: Who initiated replay (future enhancement)
+     * - X-Replayed-By: Who initiated the replay
      *
      * @param originalHeaders headers from DLQ message
+     * @param replayedBy      who started the replay, can be null
      * @return cleaned headers with replay marker
      */
-    private List<Header> prepareHeaders(List<Header> originalHeaders) {
+    private List<Header> prepareHeaders(List<Header> originalHeaders, String replayedBy) {
         List<Header> cleanedHeaders = new ArrayList<>();
 
         // Copy original headers except the ones we want to remove
@@ -179,22 +196,25 @@ public class ReplayProducer {
         if (originalHeaders != null) {
             for (Header header : originalHeaders) {
                 String headerKey = header.key();
-                if (!DlqHeaders.isDlqOnlyHeader(headerKey)) {
+                if (DlqHeaders.isDlqOnlyHeader(headerKey)) {
+                    log.debug("Removing DLQ header: {}", headerKey);
+                } else if ("X-Replayed-At".equals(headerKey) || "X-Replayed-By".equals(headerKey)) {
+                    log.debug("Replacing previous replay header: {}", headerKey);
+                } else {
                     cleanedHeaders.add(header);
                     log.debug("Keeping header: {}", headerKey);
-                } else {
-                    log.debug("Removing DLQ header: {}", headerKey);
                 }
             }
         }
 
-        // Add replay marker header
+        // Add replay marker headers
         String replayTimestamp = Instant.now().toString(); // ISO 8601 format: 2026-01-11T10:30:00Z
-        Header replayHeader = new RecordHeader(
-                "X-Replayed-At",
-                replayTimestamp.getBytes(StandardCharsets.UTF_8)
-        );
-        cleanedHeaders.add(replayHeader);
+        cleanedHeaders.add(new RecordHeader("X-Replayed-At", replayTimestamp.getBytes(StandardCharsets.UTF_8)));
+
+        if (replayedBy != null && !replayedBy.isBlank()) {
+            cleanedHeaders.add(new RecordHeader("X-Replayed-By", replayedBy.getBytes(StandardCharsets.UTF_8)));
+        }
+
         log.debug("Added replay marker header: X-Replayed-At={}", replayTimestamp);
 
         return cleanedHeaders;

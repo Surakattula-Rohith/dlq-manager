@@ -3,9 +3,14 @@ package com.dlqmanager.repository;
 import com.dlqmanager.model.entity.ReplayMessage;
 import com.dlqmanager.model.enums.ReplayMessageStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -50,6 +55,18 @@ public interface ReplayMessageRepository extends JpaRepository<ReplayMessage, UU
     long countByReplayJobIdAndStatus(UUID replayJobId, ReplayMessageStatus status);
 
     /**
+     * Find replay results for every job of a DLQ topic, filtered by status
+     * Useful for: Knowing which DLQ messages have already been replayed
+     *
+     * @param dlqTopicId the UUID of the DLQ topic
+     * @param status the status to filter by
+     * @return list of replay results across all jobs for that topic
+     */
+    @Query("SELECT rm FROM ReplayMessage rm WHERE rm.replayJob.dlqTopic.id = :dlqTopicId AND rm.status = :status")
+    List<ReplayMessage> findReplaysForDlqTopic(@Param("dlqTopicId") UUID dlqTopicId,
+                                               @Param("status") ReplayMessageStatus status);
+
+    /**
      * Find all failed messages for a job (convenience method)
      * Same as: findByReplayJobIdAndStatus(jobId, ReplayMessageStatus.FAILED)
      *
@@ -69,6 +86,35 @@ public interface ReplayMessageRepository extends JpaRepository<ReplayMessage, UU
      */
     default List<ReplayMessage> findSuccessfulMessages(UUID replayJobId) {
         return findByReplayJobIdAndStatus(replayJobId, ReplayMessageStatus.SUCCESS);
+    }
+
+    /**
+     * Which DLQ messages have already been replayed successfully?
+     *
+     * Key: "partition:offset" (see offsetKey)
+     * Value: time of the most recent successful replay
+     *
+     * @param dlqTopicId the UUID of the DLQ topic
+     * @return map of replayed message positions
+     */
+    default Map<String, LocalDateTime> findReplayedOffsets(UUID dlqTopicId) {
+        Map<String, LocalDateTime> replayed = new HashMap<>();
+        for (ReplayMessage rm : findReplaysForDlqTopic(dlqTopicId, ReplayMessageStatus.SUCCESS)) {
+            String key = offsetKey(rm.getDlqPartition(), rm.getDlqOffset());
+            LocalDateTime previous = replayed.get(key);
+            LocalDateTime current = rm.getReplayedAt();
+            if (previous == null || (current != null && current.isAfter(previous))) {
+                replayed.put(key, current);
+            }
+        }
+        return replayed;
+    }
+
+    /**
+     * Build the key used to identify a message inside a DLQ topic
+     */
+    static String offsetKey(Integer partition, Long offset) {
+        return partition + ":" + offset;
     }
 
     /**

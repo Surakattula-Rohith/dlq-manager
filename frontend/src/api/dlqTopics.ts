@@ -48,6 +48,8 @@ export const dlqTopicsApi = {
       currentPage: data.pagination.currentPage,
       totalPages: data.pagination.totalPages,
       totalMessages: data.pagination.totalMessages,
+      pendingMessages: data.pagination.pendingMessages ?? data.pagination.totalMessages,
+      replayedMessages: data.pagination.replayedMessages ?? 0,
       pageSize: data.pagination.pageSize,
     };
   },

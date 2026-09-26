@@ -100,6 +100,17 @@ public class DlqMessageDto {
     private Map<String, String> headers;
 
     /**
+     * True if this message has already been replayed successfully.
+     * The message stays in the DLQ (Kafka is append-only), so we track it ourselves.
+     */
+    private boolean replayed;
+
+    /**
+     * When the last successful replay happened (null if never replayed)
+     */
+    private String replayedAt;
+
+    /**
      * Factory method: Convert Kafka ConsumerRecord to DlqMessageDto
      *
      * @param record Raw Kafka ConsumerRecord

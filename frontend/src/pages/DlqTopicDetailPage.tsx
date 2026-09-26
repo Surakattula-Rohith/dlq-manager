@@ -24,6 +24,7 @@ export function DlqTopicDetailPage() {
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [expandedMessage, setExpandedMessage] = useState<DlqMessage | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [replayNotice, setReplayNotice] = useState<{ text: string; isError: boolean } | null>(null);
 
   const { data: topic } = useQuery({
     queryKey: ['dlqTopic', id],
@@ -43,16 +44,30 @@ export function DlqTopicDetailPage() {
     enabled: !!id,
   });
 
+  const showReplayNotice = (text: string, isError: boolean) => {
+    setReplayNotice({ text, isError });
+    setTimeout(() => setReplayNotice(null), 6000);
+  };
+
   const replayMutation = useMutation({
     mutationFn: replayApi.replayBulk,
-    onSuccess: () => {
+    onSuccess: (data) => {
       setSelectedMessages(new Set());
       refetch();
       queryClient.invalidateQueries({ queryKey: ['replayHistory'] });
+      showReplayNotice(data.message, data.replayJob.failed > 0);
+    },
+    onError: () => {
+      showReplayNotice('Replay failed. Check the backend logs and Replay History.', true);
     },
   });
 
+  // Messages that were already replayed can't be bulk-selected (avoids sending duplicates)
+  const selectableMessages = messagesData?.messages.filter(m => !m.replayed) ?? [];
+  const allSelected = selectableMessages.length > 0 && selectedMessages.size === selectableMessages.length;
+
   const handleSelectMessage = (message: DlqMessage) => {
+    if (message.replayed) return;
     const key = `${message.partition}-${message.offset}`;
     const newSelection = new Set(selectedMessages);
     if (newSelection.has(key)) {
@@ -64,12 +79,12 @@ export function DlqTopicDetailPage() {
   };
 
   const handleSelectAll = () => {
-    if (!messagesData?.messages) return;
+    if (selectableMessages.length === 0) return;
 
-    if (selectedMessages.size === messagesData.messages.length) {
+    if (allSelected) {
       setSelectedMessages(new Set());
     } else {
-      const allKeys = messagesData.messages.map(m => `${m.partition}-${m.offset}`);
+      const allKeys = selectableMessages.map(m => `${m.partition}-${m.offset}`);
       setSelectedMessages(new Set(allKeys));
     }
   };
@@ -82,11 +97,35 @@ export function DlqTopicDetailPage() {
       return { partition, offset };
     });
 
-    await replayMutation.mutateAsync({
-      dlqTopicId: id,
-      messages,
-      initiatedBy: 'web-user',
-    });
+    try {
+      await replayMutation.mutateAsync({
+        dlqTopicId: id,
+        messages,
+        initiatedBy: 'web-user',
+      });
+    } catch {
+      // Error is shown by the mutation's onError handler
+    }
+  };
+
+  const handleReplayFromModal = async (message: DlqMessage) => {
+    if (message.replayed && !window.confirm(
+      'This message was already replayed. Sending it again may process it twice in the source system. Replay anyway?'
+    )) {
+      return;
+    }
+
+    try {
+      await replayMutation.mutateAsync({
+        dlqTopicId: id!,
+        messages: [{ partition: message.partition, offset: message.offset }],
+        initiatedBy: 'web-user',
+        force: message.replayed === true,
+      });
+      setExpandedMessage(null);
+    } catch {
+      // Error is shown by the mutation's onError handler
+    }
   };
 
   const copyToClipboard = (text: string, field: string) => {
@@ -142,6 +181,17 @@ export function DlqTopicDetailPage() {
           </div>
         )}
 
+        {/* Replay result */}
+        {replayNotice && (
+          <div className={`mb-4 px-4 py-3 rounded-lg text-sm border ${
+            replayNotice.isError
+              ? 'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-700 dark:text-yellow-300'
+              : 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-700 dark:text-green-300'
+          }`}>
+            {replayNotice.text}
+          </div>
+        )}
+
         {/* Actions Bar */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
@@ -167,7 +217,7 @@ export function DlqTopicDetailPage() {
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
             Page {messagesData?.currentPage || 1} of {messagesData?.totalPages || 1}
-            ({messagesData?.totalMessages || 0} total)
+            ({messagesData?.totalMessages || 0} total, {messagesData?.pendingMessages ?? 0} pending)
           </div>
         </div>
 
@@ -186,7 +236,7 @@ export function DlqTopicDetailPage() {
                         title="Select all for replay"
                         className="flex items-center gap-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                       >
-                        {selectedMessages.size === messagesData.messages.length ? (
+                        {allSelected ? (
                           <CheckSquare className="w-5 h-5" />
                         ) : (
                           <Square className="w-5 h-5" />
@@ -215,7 +265,9 @@ export function DlqTopicDetailPage() {
                         <td className="px-4 py-4">
                           <button
                             onClick={() => handleSelectMessage(message)}
-                            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                            disabled={message.replayed}
+                            title={message.replayed ? 'Already replayed - open details to replay again' : undefined}
+                            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             {isSelected ? (
                               <CheckSquare className="w-5 h-5 text-orange-600" />
@@ -225,7 +277,17 @@ export function DlqTopicDetailPage() {
                           </button>
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap font-mono text-sm text-gray-900 dark:text-gray-200">
-                          {message.offset}
+                          <div className="flex items-center gap-2">
+                            {message.offset}
+                            {message.replayed && (
+                              <span
+                                title={message.replayedAt ? `Replayed ${new Date(message.replayedAt).toLocaleString()}` : 'Replayed'}
+                                className="inline-flex px-2 py-0.5 text-xs font-sans font-medium rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                              >
+                                Replayed
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">
                           {message.partition}
@@ -343,6 +405,14 @@ export function DlqTopicDetailPage() {
                   <div><span className="text-gray-500 dark:text-gray-400">Partition:</span> <span className="text-gray-900 dark:text-white">{expandedMessage.partition}</span></div>
                   <div><span className="text-gray-500 dark:text-gray-400">Key:</span> <span className="text-gray-900 dark:text-white">{expandedMessage.key || '-'}</span></div>
                   <div><span className="text-gray-500 dark:text-gray-400">Timestamp:</span> <span className="text-gray-900 dark:text-white">{new Date(expandedMessage.timestamp).toLocaleString()}</span></div>
+                  {expandedMessage.replayed && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500 dark:text-gray-400">Replayed:</span>{' '}
+                      <span className="text-green-700 dark:text-green-300">
+                        {expandedMessage.replayedAt ? new Date(expandedMessage.replayedAt).toLocaleString() : 'Yes'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -405,19 +475,12 @@ export function DlqTopicDetailPage() {
                 Close
               </button>
               <button
-                onClick={async () => {
-                  await replayMutation.mutateAsync({
-                    dlqTopicId: id!,
-                    messages: [{ partition: expandedMessage.partition, offset: expandedMessage.offset }],
-                    initiatedBy: 'web-user',
-                  });
-                  setExpandedMessage(null);
-                }}
+                onClick={() => handleReplayFromModal(expandedMessage)}
                 disabled={replayMutation.isPending}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
               >
                 <Play className="w-4 h-4" />
-                Replay This Message
+                {expandedMessage.replayed ? 'Replay Again' : 'Replay This Message'}
               </button>
             </div>
           </div>

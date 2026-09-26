@@ -53,6 +53,12 @@ public class BulkReplayRequestDto {
     private String initiatedBy;
 
     /**
+     * Optional: Replay messages even if they were already replayed successfully
+     * Default false - already-replayed messages are skipped and reported as failed
+     */
+    private Boolean force;
+
+    /**
      * Inner class to identify a message by offset and partition
      */
     @Data

@@ -3,6 +3,7 @@ package com.dlqmanager.service;
 import com.dlqmanager.model.dto.DlqMessageDto;
 import com.dlqmanager.model.entity.DlqTopic;
 import com.dlqmanager.repository.DlqTopicRepository;
+import com.dlqmanager.repository.ReplayMessageRepository;
 import com.dlqmanager.util.DlqHeaders;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -14,6 +15,8 @@ import org.apache.kafka.common.TopicPartition;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -55,13 +58,26 @@ public class DlqBrowserService {
 
     private final DlqTopicRepository dlqTopicRepository;
     private final KafkaConfigService kafkaConfigService;
+    private final ReplayMessageRepository replayMessageRepository;
 
     public DlqBrowserService(
             DlqTopicRepository dlqTopicRepository,
-            KafkaConfigService kafkaConfigService
+            KafkaConfigService kafkaConfigService,
+            ReplayMessageRepository replayMessageRepository
     ) {
         this.dlqTopicRepository = dlqTopicRepository;
         this.kafkaConfigService = kafkaConfigService;
+        this.replayMessageRepository = replayMessageRepository;
+    }
+
+    /**
+     * Message counts for a DLQ topic
+     *
+     * @param total    messages currently stored in Kafka (all partitions)
+     * @param replayed of those, how many were already replayed successfully
+     * @param pending  messages still waiting to be handled (total - replayed)
+     */
+    public record MessageCounts(long total, long replayed, long pending) {
     }
 
     /**
@@ -72,7 +88,7 @@ public class DlqBrowserService {
      * 2. Find all partitions and their beginning/end offsets
      * 3. Work out which partition + offset the requested page starts at
      * 4. Read messages from there (moving on to the next partition if needed)
-     * 5. Convert to DTOs
+     * 5. Convert to DTOs and mark the ones already replayed
      *
      * @param dlqTopicId UUID of the DLQ topic in our database
      * @param page Page number (1-based)
@@ -84,6 +100,7 @@ public class DlqBrowserService {
 
         DlqTopic dlqTopic = findDlqTopic(dlqTopicId);
         String topicName = dlqTopic.getDlqTopicName();
+        Map<String, LocalDateTime> replayedOffsets = replayMessageRepository.findReplayedOffsets(dlqTopicId);
 
         List<DlqMessageDto> messages = new ArrayList<>();
         long toSkip = (long) (page - 1) * size;
@@ -117,8 +134,11 @@ public class DlqBrowserService {
                 toSkip = 0;
 
                 int stillNeeded = size - messages.size();
-                readRange(consumer, partition, startOffset, end, stillNeeded,
-                        record -> messages.add(DlqMessageDto.fromConsumerRecord(record, dlqTopic.getErrorFieldPath())));
+                readRange(consumer, partition, startOffset, end, stillNeeded, record -> {
+                    DlqMessageDto dto = DlqMessageDto.fromConsumerRecord(record, dlqTopic.getErrorFieldPath());
+                    markReplayed(dto, replayedOffsets);
+                    messages.add(dto);
+                });
 
                 if (messages.size() >= size) {
                     break;
@@ -146,7 +166,21 @@ public class DlqBrowserService {
      * @return Total number of messages currently stored in the topic
      */
     public long getMessageCount(UUID dlqTopicId) {
-        log.info("Getting message count for DLQ topic ID: {}", dlqTopicId);
+        return getMessageCounts(dlqTopicId).total();
+    }
+
+    /**
+     * Get total, replayed and pending counts for a DLQ topic
+     *
+     * Replayed messages stay in the DLQ (Kafka is append-only), so "total" never
+     * goes down after a replay. "pending" is the number people actually care about:
+     * messages that are still waiting to be fixed or replayed.
+     *
+     * @param dlqTopicId UUID of the DLQ topic
+     * @return counts for the topic
+     */
+    public MessageCounts getMessageCounts(UUID dlqTopicId) {
+        log.debug("Getting message counts for DLQ topic ID: {}", dlqTopicId);
 
         DlqTopic dlqTopic = findDlqTopic(dlqTopicId);
         String topicName = dlqTopic.getDlqTopicName();
@@ -154,19 +188,35 @@ public class DlqBrowserService {
         try (KafkaConsumer<String, String> consumer = createConsumer()) {
             List<TopicPartition> partitions = getPartitions(consumer, topicName);
             if (partitions.isEmpty()) {
-                return 0;
+                return new MessageCounts(0, 0, 0);
             }
 
             Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
             Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
 
-            long totalMessages = 0;
+            long total = 0;
             for (TopicPartition partition : partitions) {
-                totalMessages += endOffsets.getOrDefault(partition, 0L) - beginningOffsets.getOrDefault(partition, 0L);
+                total += endOffsets.getOrDefault(partition, 0L) - beginningOffsets.getOrDefault(partition, 0L);
             }
 
-            log.info("Topic: {}, partitions: {}, total messages: {}", topicName, partitions.size(), totalMessages);
-            return totalMessages;
+            // Only count replayed messages that are still stored in Kafka
+            // (older ones were already removed by retention and are not part of "total")
+            long replayed = 0;
+            for (String key : replayMessageRepository.findReplayedOffsets(dlqTopicId).keySet()) {
+                String[] parts = key.split(":");
+                TopicPartition partition = new TopicPartition(topicName, Integer.parseInt(parts[0]));
+                long offset = Long.parseLong(parts[1]);
+                Long begin = beginningOffsets.get(partition);
+                Long end = endOffsets.get(partition);
+                if (begin != null && end != null && offset >= begin && offset < end) {
+                    replayed++;
+                }
+            }
+
+            long pending = Math.max(0, total - replayed);
+
+            log.debug("Topic: {}, total: {}, replayed: {}, pending: {}", topicName, total, replayed, pending);
+            return new MessageCounts(total, replayed, pending);
 
         } catch (Exception e) {
             log.error("Error getting message count", e);
@@ -302,6 +352,16 @@ public class DlqBrowserService {
                 .map(info -> new TopicPartition(info.topic(), info.partition()))
                 .sorted(Comparator.comparingInt(TopicPartition::partition))
                 .toList();
+    }
+
+    private void markReplayed(DlqMessageDto dto, Map<String, LocalDateTime> replayedOffsets) {
+        String key = ReplayMessageRepository.offsetKey(dto.getPartition(), dto.getOffset());
+        if (replayedOffsets.containsKey(key)) {
+            dto.setReplayed(true);
+            LocalDateTime replayedAt = replayedOffsets.get(key);
+            // The app runs in UTC (see DlqManagerApplication), so send an ISO instant the browser can convert
+            dto.setReplayedAt(replayedAt != null ? replayedAt.toInstant(ZoneOffset.UTC).toString() : null);
+        }
     }
 
     /**

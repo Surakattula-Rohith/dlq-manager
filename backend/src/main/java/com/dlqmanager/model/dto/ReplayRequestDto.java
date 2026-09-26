@@ -58,4 +58,10 @@ public class ReplayRequestDto {
      * If null, service will use default: "system"
      */
     private String initiatedBy;
+
+    /**
+     * Optional: Replay even if this message was already replayed successfully
+     * Default false - protects against sending the same message twice by accident
+     */
+    private Boolean force;
 }

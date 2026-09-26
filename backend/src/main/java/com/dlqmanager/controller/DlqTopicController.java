@@ -264,8 +264,10 @@ public class DlqTopicController {
             // Fetch messages from Kafka
             List<DlqMessageDto> messages = dlqBrowserService.getMessages(id, page, size);
 
-            // Get total count for pagination metadata
-            long totalMessages = dlqBrowserService.getMessageCount(id);
+            // Get counts for pagination metadata
+            // total = everything stored in Kafka (all browsable), pending = not yet replayed
+            DlqBrowserService.MessageCounts counts = dlqBrowserService.getMessageCounts(id);
+            long totalMessages = counts.total();
             int totalPages = (int) Math.ceil((double) totalMessages / size);
 
             // Build response with pagination metadata
@@ -276,6 +278,8 @@ public class DlqTopicController {
                 "currentPage", page,
                 "pageSize", size,
                 "totalMessages", totalMessages,
+                "pendingMessages", counts.pending(),
+                "replayedMessages", counts.replayed(),
                 "totalPages", totalPages,
                 "hasNextPage", page < totalPages,
                 "hasPreviousPage", page > 1
@@ -310,11 +314,13 @@ public class DlqTopicController {
         log.info("API: GET /api/dlq-topics/{}/message-count", id);
 
         try {
-            long totalMessages = dlqBrowserService.getMessageCount(id);
+            DlqBrowserService.MessageCounts counts = dlqBrowserService.getMessageCounts(id);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("totalMessages", totalMessages);
+            response.put("totalMessages", counts.total());
+            response.put("pendingMessages", counts.pending());
+            response.put("replayedMessages", counts.replayed());
 
             return ResponseEntity.ok(response);
 

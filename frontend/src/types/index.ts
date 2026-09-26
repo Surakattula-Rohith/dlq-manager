@@ -23,6 +23,8 @@ export interface DlqMessage {
   retryCount?: number;
   exceptionClass?: string;
   failedTimestamp?: string;
+  replayed?: boolean;
+  replayedAt?: string;
 }
 
 export interface MessagePage {
@@ -30,6 +32,8 @@ export interface MessagePage {
   currentPage: number;
   totalPages: number;
   totalMessages: number;
+  pendingMessages: number;
+  replayedMessages: number;
   pageSize: number;
 }
 
@@ -75,6 +79,7 @@ export interface BulkReplayRequest {
   dlqTopicId: string;
   messages: { offset: number; partition: number }[];
   initiatedBy: string;
+  force?: boolean;
 }
 
 // Alert types
