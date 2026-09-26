@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Header } from '../components/layout';
 import { kafkaApi } from '../api/kafka';
@@ -22,15 +22,11 @@ export function SettingsPage() {
     retry: false,
   });
 
-const [bootstrapServers, setBootstrapServers] = useState('');
+  // null = user hasn't typed anything yet, so show the saved value from the server
+  const [bootstrapServersDraft, setBootstrapServers] = useState<string | null>(null);
+  const bootstrapServers = bootstrapServersDraft ?? kafkaConfig?.bootstrapServers ?? '';
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
-
-  useEffect(() => {
-    if (kafkaConfig?.bootstrapServers) {
-      setBootstrapServers(kafkaConfig.bootstrapServers);
-    }
-  }, [kafkaConfig]);
 
   const testMutation = useMutation({
     mutationFn: (servers: string) => kafkaApi.testConnection(servers),
