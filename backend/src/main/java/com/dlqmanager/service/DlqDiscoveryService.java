@@ -8,6 +8,7 @@ import com.dlqmanager.model.entity.ReplayJob;
 import com.dlqmanager.model.enums.DlqStatus;
 import com.dlqmanager.repository.AlertEventRepository;
 import com.dlqmanager.repository.AlertRuleRepository;
+import com.dlqmanager.repository.DlqCountSampleRepository;
 import com.dlqmanager.repository.DlqTopicRepository;
 import com.dlqmanager.repository.ReplayJobRepository;
 import com.dlqmanager.repository.ReplayMessageRepository;
@@ -35,6 +36,7 @@ public class DlqDiscoveryService {
     private final AlertEventRepository alertEventRepository;
     private final ReplayJobRepository replayJobRepository;
     private final ReplayMessageRepository replayMessageRepository;
+    private final DlqCountSampleRepository dlqCountSampleRepository;
 
     /**
      * Register a new DLQ topic
@@ -171,6 +173,9 @@ public class DlqDiscoveryService {
             replayMessageRepository.deleteByReplayJobId(job.getId());
         }
         replayJobRepository.deleteAll(replayJobs);
+
+        // Alert count history for this topic
+        dlqCountSampleRepository.deleteByDlqTopicId(id);
 
         dlqTopicRepository.delete(dlqTopic);
 

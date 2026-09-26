@@ -73,11 +73,12 @@ public class DlqBrowserService {
     /**
      * Message counts for a DLQ topic
      *
-     * @param total    messages currently stored in Kafka (all partitions)
-     * @param replayed of those, how many were already replayed successfully
-     * @param pending  messages still waiting to be handled (total - replayed)
+     * @param total        messages currently stored in Kafka (all partitions)
+     * @param replayed     of those, how many were already replayed successfully
+     * @param pending      messages still waiting to be handled (total - replayed)
+     * @param endOffsetSum sum of end offsets - only grows, used to measure new arrivals over time
      */
-    public record MessageCounts(long total, long replayed, long pending) {
+    public record MessageCounts(long total, long replayed, long pending, long endOffsetSum) {
     }
 
     /**
@@ -188,15 +189,18 @@ public class DlqBrowserService {
         try (KafkaConsumer<String, String> consumer = createConsumer()) {
             List<TopicPartition> partitions = getPartitions(consumer, topicName);
             if (partitions.isEmpty()) {
-                return new MessageCounts(0, 0, 0);
+                return new MessageCounts(0, 0, 0, 0);
             }
 
             Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
             Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
 
             long total = 0;
+            long endOffsetSum = 0;
             for (TopicPartition partition : partitions) {
-                total += endOffsets.getOrDefault(partition, 0L) - beginningOffsets.getOrDefault(partition, 0L);
+                long end = endOffsets.getOrDefault(partition, 0L);
+                total += end - beginningOffsets.getOrDefault(partition, 0L);
+                endOffsetSum += end;
             }
 
             // Only count replayed messages that are still stored in Kafka
@@ -216,7 +220,7 @@ public class DlqBrowserService {
             long pending = Math.max(0, total - replayed);
 
             log.debug("Topic: {}, total: {}, replayed: {}, pending: {}", topicName, total, replayed, pending);
-            return new MessageCounts(total, replayed, pending);
+            return new MessageCounts(total, replayed, pending, endOffsetSum);
 
         } catch (Exception e) {
             log.error("Error getting message count", e);

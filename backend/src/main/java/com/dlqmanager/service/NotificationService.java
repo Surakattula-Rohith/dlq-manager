@@ -2,6 +2,7 @@ package com.dlqmanager.service;
 
 import com.dlqmanager.model.entity.AlertRule;
 import com.dlqmanager.model.entity.NotificationChannel;
+import com.dlqmanager.model.enums.AlertType;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -45,16 +46,21 @@ public class NotificationService {
 
     // --- Slack ---
 
-    private void sendSlack(NotificationChannel channel, AlertRule rule, long messageCount) throws Exception {
+    private void sendSlack(NotificationChannel channel, AlertRule rule, long value) throws Exception {
         Map<String, String> config = parseConfig(channel.getConfiguration());
         String webhookUrl = config.get("webhookUrl");
         if (webhookUrl == null || webhookUrl.isBlank()) throw new IllegalArgumentException("webhookUrl is missing");
 
+        // Threshold rules report pending messages, time-window rules report new arrivals
+        String measurement = rule.getAlertType() == AlertType.TIME_WINDOW
+                ? String.format("New messages in last %d min: *%d*", rule.getWindowMinutes(), value)
+                : String.format("Pending messages: *%d*", value);
+
         String text = String.format(
-                ":rotating_light: *DLQ Alert: %s*\nTopic: `%s` | Messages: *%d* | Threshold: %d",
+                ":rotating_light: *DLQ Alert: %s*\nTopic: `%s` | %s | Threshold: %d",
                 rule.getName(),
                 rule.getDlqTopic().getDlqTopicName(),
-                messageCount,
+                measurement,
                 rule.getThreshold()
         );
         Map<String, Object> body = Map.of("text", text);
