@@ -74,7 +74,7 @@ Made the tool behave correctly on real Kafka setups, not just demo data:
 | Backend | Java 21, Spring Boot 3.5, Spring Data JPA |
 | Messaging | Apache Kafka Client (consumer + producer) |
 | Database | PostgreSQL 15 |
-| Infra | Docker Compose |
+| Infra | Docker Compose, Kafka in KRaft mode (no ZooKeeper) |
 
 ---
 
