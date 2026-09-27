@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Header } from '../components/layout';
 import { dlqTopicsApi } from '../api/dlqTopics';
 import { replayApi } from '../api/replay';
@@ -14,7 +14,9 @@ import {
   ChevronRight,
   AlertCircle,
   Copy,
-  Check
+  Check,
+  Search,
+  X
 } from 'lucide-react';
 
 export function DlqTopicDetailPage() {
@@ -26,17 +28,58 @@ export function DlqTopicDetailPage() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [replayNotice, setReplayNotice] = useState<{ text: string; isError: boolean } | null>(null);
 
+  // Filters: what's typed in the box vs. the search actually sent (after a short pause in typing)
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [errorType, setErrorType] = useState<string | null>(null);
+  const [pendingOnly, setPendingOnly] = useState(false);
+  const searchTimer = useRef<number | undefined>(undefined);
+  const hasFilters = search !== '' || errorType !== null || pendingOnly;
+
   const { data: topic } = useQuery({
     queryKey: ['dlqTopic', id],
     queryFn: () => dlqTopicsApi.getById(id!),
     enabled: !!id,
   });
 
-  const { data: messagesData, isLoading, refetch } = useQuery({
-    queryKey: ['dlqMessages', id, page],
-    queryFn: () => dlqTopicsApi.getMessages(id!, page, 10),
+  const { data: messagesData, isLoading, isFetching, refetch } = useQuery({
+    queryKey: ['dlqMessages', id, page, search, errorType, pendingOnly],
+    queryFn: () => dlqTopicsApi.getMessages(id!, page, 10, {
+      search,
+      errorType: errorType ?? undefined,
+      pendingOnly,
+    }),
     enabled: !!id,
+    // Keep showing the current page while the next one (or a new search) loads
+    placeholderData: keepPreviousData,
   });
+
+  // Any filter change starts again from page 1 with nothing selected
+  const applyFilters = (update: () => void) => {
+    update();
+    setPage(1);
+    setSelectedMessages(new Set());
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value);
+    window.clearTimeout(searchTimer.current);
+    searchTimer.current = window.setTimeout(() => applyFilters(() => setSearch(value.trim())), 400);
+  };
+
+  const handleErrorTypeClick = (type: string) => {
+    applyFilters(() => setErrorType(current => (current === type ? null : type)));
+  };
+
+  const clearFilters = () => {
+    window.clearTimeout(searchTimer.current);
+    setSearchInput('');
+    applyFilters(() => {
+      setSearch('');
+      setErrorType(null);
+      setPendingOnly(false);
+    });
+  };
 
   const { data: errorBreakdown } = useQuery({
     queryKey: ['errorBreakdown', id],
@@ -156,11 +199,24 @@ export function DlqTopicDetailPage() {
         {/* Error Breakdown */}
         {errorBreakdown && errorBreakdown.errorBreakdown.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Error Breakdown</h3>
-            <div className="space-y-3">
-              {errorBreakdown.errorBreakdown.slice(0, 5).map((item, index) => (
-                <div key={index} className="flex items-center gap-4">
-                  <div className="flex-1">
+            <div className="flex items-baseline justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Error Breakdown</h3>
+              <span className="text-xs text-gray-400 dark:text-gray-500">Click an error to filter the messages</span>
+            </div>
+            <div className="space-y-1">
+              {errorBreakdown.errorBreakdown.slice(0, 5).map((item) => {
+                const isActive = errorType === item.errorType;
+                return (
+                  <button
+                    key={item.errorType}
+                    onClick={() => handleErrorTypeClick(item.errorType)}
+                    title={isActive ? 'Show all errors' : `Show only "${item.errorType}"`}
+                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-orange-50 dark:bg-orange-900/20 ring-1 ring-orange-400'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                    }`}
+                  >
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">{item.errorType}</span>
                       <span className="text-sm text-gray-500 dark:text-gray-400">{item.count} ({item.percentage.toFixed(1)}%)</span>
@@ -171,9 +227,9 @@ export function DlqTopicDetailPage() {
                         style={{ width: `${item.percentage}%` }}
                       ></div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  </button>
+                );
+              })}
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
               Total: {errorBreakdown.totalMessages} messages, {errorBreakdown.uniqueErrorTypes} error types
@@ -189,6 +245,58 @@ export function DlqTopicDetailPage() {
               : 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-700 dark:text-green-300'
           }`}>
             {replayNotice.text}
+          </div>
+        )}
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search key, payload or headers..."
+              className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-72"
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={pendingOnly}
+              onChange={(e) => applyFilters(() => setPendingOnly(e.target.checked))}
+              className="w-4 h-4 accent-orange-600"
+            />
+            Hide replayed
+          </label>
+
+          {errorType && (
+            <span className="inline-flex items-center gap-1 px-3 py-1 text-sm rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">
+              Error: {errorType}
+              <button onClick={() => handleErrorTypeClick(errorType)} title="Remove error filter">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </span>
+          )}
+
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+            >
+              Clear filters
+            </button>
+          )}
+
+          {isFetching && !isLoading && (
+            <span className="text-sm text-gray-400 dark:text-gray-500">Searching...</span>
+          )}
+        </div>
+
+        {messagesData?.scanLimitReached && (
+          <div className="mb-4 px-4 py-3 rounded-lg text-sm border bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-700 dark:text-yellow-300">
+            This DLQ is very large, so only the first 100,000 messages were searched.
           </div>
         )}
 
@@ -217,7 +325,9 @@ export function DlqTopicDetailPage() {
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
             Page {messagesData?.currentPage || 1} of {messagesData?.totalPages || 1}
-            ({messagesData?.totalMessages || 0} total, {messagesData?.pendingMessages ?? 0} pending)
+            {messagesData?.filtered
+              ? ` (${messagesData.matchingMessages} matching of ${messagesData.totalMessages})`
+              : ` (${messagesData?.totalMessages || 0} total, ${messagesData?.pendingMessages ?? 0} pending)`}
           </div>
         </div>
 
@@ -321,7 +431,14 @@ export function DlqTopicDetailPage() {
               </table>
             ) : (
               <div className="p-8 text-center text-gray-500 dark:text-gray-400">
-                No messages in this DLQ topic.
+                {hasFilters ? (
+                  <>
+                    No messages match these filters.{' '}
+                    <button onClick={clearFilters} className="text-orange-600 hover:underline">Clear filters</button>
+                  </>
+                ) : (
+                  'No messages in this DLQ topic.'
+                )}
               </div>
             )}
           </div>

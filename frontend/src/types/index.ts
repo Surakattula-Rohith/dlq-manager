@@ -34,7 +34,16 @@ export interface MessagePage {
   totalMessages: number;
   pendingMessages: number;
   replayedMessages: number;
+  matchingMessages: number;
+  filtered: boolean;
+  scanLimitReached: boolean;
   pageSize: number;
+}
+
+export interface MessageFilters {
+  search?: string;
+  errorType?: string;
+  pendingOnly?: boolean;
 }
 
 // Error breakdown types

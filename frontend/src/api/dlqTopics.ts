@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { DlqTopic, MessagePage, ErrorBreakdown } from '../types';
+import type { DlqTopic, MessagePage, ErrorBreakdown, MessageFilters } from '../types';
 
 export const dlqTopicsApi = {
   // Get all DLQ topics
@@ -31,10 +31,16 @@ export const dlqTopicsApi = {
     await apiClient.delete(`/api/dlq-topics/${id}`);
   },
 
-  // Get messages from DLQ topic
-  getMessages: async (id: string, page: number = 1, size: number = 10): Promise<MessagePage> => {
+  // Get messages from DLQ topic (optionally filtered)
+  getMessages: async (id: string, page: number = 1, size: number = 10, filters: MessageFilters = {}): Promise<MessagePage> => {
     const response = await apiClient.get(`/api/dlq-topics/${id}/messages`, {
-      params: { page, size },
+      params: {
+        page,
+        size,
+        search: filters.search || undefined,
+        errorType: filters.errorType || undefined,
+        pendingOnly: filters.pendingOnly || undefined,
+      },
     });
     // Transform backend response to match frontend types
     const data = response.data;
@@ -50,6 +56,9 @@ export const dlqTopicsApi = {
       totalMessages: data.pagination.totalMessages,
       pendingMessages: data.pagination.pendingMessages ?? data.pagination.totalMessages,
       replayedMessages: data.pagination.replayedMessages ?? 0,
+      matchingMessages: data.pagination.matchingMessages ?? data.pagination.totalMessages,
+      filtered: data.pagination.filtered ?? false,
+      scanLimitReached: data.pagination.scanLimitReached ?? false,
       pageSize: data.pagination.pageSize,
     };
   },
