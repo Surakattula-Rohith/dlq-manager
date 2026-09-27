@@ -79,4 +79,13 @@ export const dlqTopicsApi = {
       uniqueErrorTypes: data.errorBreakdown?.length || 0,
     };
   },
+
+  // Download link for the messages matching the filters (the browser handles the download)
+  exportUrl: (id: string, format: 'csv' | 'json', filters: MessageFilters = {}): string => {
+    const params = new URLSearchParams({ format });
+    if (filters.search) params.set('search', filters.search);
+    if (filters.errorType) params.set('errorType', filters.errorType);
+    if (filters.pendingOnly) params.set('pendingOnly', 'true');
+    return `${apiClient.defaults.baseURL ?? ''}/api/dlq-topics/${id}/messages/export?${params.toString()}`;
+  },
 };

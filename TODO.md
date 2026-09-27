@@ -49,9 +49,10 @@
 ## Backlog
 
 ### Message Management
-- [ ] Search messages by key, payload, or headers
-- [ ] Filter by date range or error type
-- [ ] Export messages to JSON/CSV
+- [x] Search messages by key, payload, or headers
+- [x] Filter by error type or replay status
+- [ ] Filter by date range
+- [x] Export messages to JSON/CSV
 - [ ] Archive/delete messages from DLQ
 
 ### Replay Enhancements

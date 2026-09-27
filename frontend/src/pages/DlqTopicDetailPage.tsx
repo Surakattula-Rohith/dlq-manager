@@ -16,7 +16,8 @@ import {
   Copy,
   Check,
   Search,
-  X
+  X,
+  Download
 } from 'lucide-react';
 
 export function DlqTopicDetailPage() {
@@ -291,6 +292,27 @@ export function DlqTopicDetailPage() {
 
           {isFetching && !isLoading && (
             <span className="text-sm text-gray-400 dark:text-gray-500">Searching...</span>
+          )}
+
+          {/* Export: downloads every message matching the current filters, not just this page */}
+          {id && (messagesData?.matchingMessages ?? 0) > 0 && (
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                Export {messagesData?.matchingMessages}:
+              </span>
+              {(['csv', 'json'] as const).map(format => (
+                <a
+                  key={format}
+                  href={dlqTopicsApi.exportUrl(id, format, { search, errorType: errorType ?? undefined, pendingOnly })}
+                  download
+                  title={`Download as ${format.toUpperCase()}`}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  <Download className="w-4 h-4" />
+                  {format.toUpperCase()}
+                </a>
+              ))}
+            </div>
           )}
         </div>
 
