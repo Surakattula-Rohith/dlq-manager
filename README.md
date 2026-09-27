@@ -1,6 +1,6 @@
 # Kafka DLQ Manager
 
-[![CI](https://github.com/Surakattula-Rohith/dlq-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Surakattula-Rohith/dlq-manager/actions/workflows/ci.yml)
+[![CI](https://github.com/Surakattula-Rohith/dlq-manager/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Surakattula-Rohith/dlq-manager/actions/workflows/ci.yml)
 ![Java](https://img.shields.io/badge/Java-21%2B-blue)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-brightgreen)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
@@ -80,13 +80,25 @@ Made the tool behave correctly on real Kafka setups, not just demo data:
 
 ## Quick Start
 
+### Run everything with Docker
+
+**Prerequisites:** Docker
+
+```bash
+git clone https://github.com/Surakattula-Rohith/dlq-manager.git
+cd dlq-manager
+docker compose up --build
+```
+
+Open **http://localhost:3000**. The UI, API, Kafka and PostgreSQL all run in containers, so no Java or Node is needed. The backend is already pointed at Kafka (`kafka:29092` inside Docker).
+
+### Run from source (development)
+
 **Prerequisites:** Docker, Java 21+, Node.js 20.19+
 
 ```bash
-# 1. Start infrastructure (Kafka + PostgreSQL)
-git clone https://github.com/Surakattula-Rohith/dlq-manager.git
-cd dlq-manager
-docker compose up -d
+# 1. Start infrastructure only (Kafka + PostgreSQL)
+docker compose up -d kafka postgres
 
 # 2. Start backend
 cd backend && ./mvnw spring-boot:run      # http://localhost:8080
@@ -95,12 +107,12 @@ cd backend && ./mvnw spring-boot:run      # http://localhost:8080
 cd frontend && npm install && npm run dev  # http://localhost:5173
 ```
 
-Then go to **Settings**, enter your Kafka bootstrap servers, click **Test Connection**, and **Save**.
+Kafka is reachable at `localhost:9092` from your machine (the default in **Settings**).
 
 **Ports already in use?** Every default can be changed with an environment variable:
 
 ```bash
-POSTGRES_PORT=5433 docker compose up -d
+FRONTEND_PORT=3001 POSTGRES_PORT=5433 docker compose up --build     # Docker
 cd backend && SERVER_PORT=8081 DB_URL='jdbc:postgresql://localhost:5433/dlqmanager' ./mvnw spring-boot:run
 cd frontend && FRONTEND_PORT=5174 BACKEND_URL=http://localhost:8081 npm run dev
 ```

@@ -1,3 +1,6 @@
+# Run everything:             docker compose up --build        -> http://localhost:3000
+# Infrastructure only (dev):  docker compose up -d kafka postgres
+
 services:
   # Kafka Broker - Where DLQ messages live
   # Runs in KRaft mode (Kafka manages its own metadata), so no ZooKeeper is needed
@@ -49,6 +52,36 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
+    networks:
+      - dlq-network
+
+  # Spring Boot API (reached through the frontend at /api, so no host port is needed)
+  backend:
+    build: ./backend
+    container_name: dlq-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/dlqmanager?user.timezone=UTC&TimeZone=UTC
+      DB_USERNAME: dlquser
+      DB_PASSWORD: dlqpass
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    restart: unless-stopped
+    networks:
+      - dlq-network
+
+  # React UI served by nginx, which forwards /api to the backend
+  frontend:
+    build: ./frontend
+    container_name: dlq-frontend
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
     restart: unless-stopped
     networks:
       - dlq-network

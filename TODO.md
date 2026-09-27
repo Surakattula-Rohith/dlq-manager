@@ -65,7 +65,7 @@
 - [ ] Kafka consumer lag monitoring
 
 ### Deployment
-- [ ] Single Docker image (frontend + backend)
+- [x] Run the whole app with one `docker compose up` (backend + frontend images)
 - [ ] Kubernetes Helm chart
 - [ ] Prometheus metrics endpoint
 
