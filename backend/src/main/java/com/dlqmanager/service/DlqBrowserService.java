@@ -52,9 +52,9 @@ public class DlqBrowserService {
     private static final int MAX_EMPTY_POLLS = 3;
 
     /**
-     * Upper limit for the error breakdown scan, so one huge DLQ can't hang the page.
+     * Upper limit for full scans (error breakdown, search), so one huge DLQ can't hang the page.
      */
-    private static final long MAX_BREAKDOWN_MESSAGES = 100_000;
+    private static final long MAX_SCAN_MESSAGES = 100_000;
 
     private final DlqTopicRepository dlqTopicRepository;
     private final KafkaConfigService kafkaConfigService;
@@ -79,6 +79,94 @@ public class DlqBrowserService {
      * @param endOffsetSum sum of end offsets - only grows, used to measure new arrivals over time
      */
     public record MessageCounts(long total, long replayed, long pending, long endOffsetSum) {
+    }
+
+    /**
+     * One page of search results
+     *
+     * @param messages         the messages on the requested page
+     * @param matching         how many messages match the filter in total
+     * @param scanLimitReached true if the DLQ was too big to check every message
+     */
+    public record SearchResult(List<DlqMessageDto> messages, long matching, boolean scanLimitReached) {
+    }
+
+    /**
+     * Search / filter messages in a DLQ topic, with pagination over the matches
+     *
+     * Unlike getMessages, we can't jump to a page: Kafka can't filter by content,
+     * so every message is read (up to MAX_SCAN_MESSAGES) and checked against the filter.
+     * Only the messages on the requested page are converted to DTOs.
+     *
+     * @param dlqTopicId UUID of the DLQ topic
+     * @param filter     what to look for
+     * @param page       page number (1-based) within the matches
+     * @param size       messages per page
+     * @return the page of matches plus the total number of matches
+     */
+    public SearchResult searchMessages(UUID dlqTopicId, MessageFilter filter, int page, int size) {
+        log.info("Searching DLQ topic ID: {} with {}, page: {}, size: {}", dlqTopicId, filter, page, size);
+
+        DlqTopic dlqTopic = findDlqTopic(dlqTopicId);
+        String topicName = dlqTopic.getDlqTopicName();
+        String errorFieldPath = dlqTopic.getErrorFieldPath();
+        Map<String, LocalDateTime> replayedOffsets = replayMessageRepository.findReplayedOffsets(dlqTopicId);
+
+        long firstMatch = (long) (page - 1) * size;
+        List<DlqMessageDto> pageMessages = new ArrayList<>();
+        long[] matching = {0};
+        long[] scanned = {0};
+        boolean scanLimitReached = false;
+
+        try (KafkaConsumer<String, String> consumer = createConsumer()) {
+            List<TopicPartition> partitions = getPartitions(consumer, topicName);
+            Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
+            Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
+
+            for (TopicPartition partition : partitions) {
+                long remaining = MAX_SCAN_MESSAGES - scanned[0];
+                if (remaining <= 0) {
+                    scanLimitReached = true;
+                    log.warn("Search in {} stopped at {} messages", topicName, MAX_SCAN_MESSAGES);
+                    break;
+                }
+
+                long begin = beginningOffsets.getOrDefault(partition, 0L);
+                long end = endOffsets.getOrDefault(partition, 0L);
+
+                readRange(consumer, partition, begin, end, remaining, record -> {
+                    scanned[0]++;
+
+                    Map<String, String> headers = DlqHeaders.toMap(record.headers());
+                    String errorType = DlqHeaders.resolveErrorType(headers, record.value(), errorFieldPath);
+                    boolean replayed = replayedOffsets.containsKey(
+                            ReplayMessageRepository.offsetKey(record.partition(), record.offset()));
+
+                    if (!filter.matches(record, headers, errorType, replayed)) {
+                        return;
+                    }
+
+                    long matchIndex = matching[0]++;
+                    if (matchIndex >= firstMatch && matchIndex < firstMatch + size) {
+                        DlqMessageDto dto = DlqMessageDto.fromConsumerRecord(record, errorFieldPath);
+                        markReplayed(dto, replayedOffsets);
+                        pageMessages.add(dto);
+                    }
+                });
+            }
+
+            if (scanned[0] >= MAX_SCAN_MESSAGES) {
+                scanLimitReached = true;
+            }
+
+            log.info("Search in {} checked {} messages, {} matched", topicName, scanned[0], matching[0]);
+
+        } catch (Exception e) {
+            log.error("Error searching messages", e);
+            throw new RuntimeException("Failed to search messages in topic: " + topicName, e);
+        }
+
+        return new SearchResult(pageMessages, matching[0], scanLimitReached);
     }
 
     /**
@@ -245,7 +333,7 @@ public class DlqBrowserService {
      * 3. Count occurrences of each error type
      * 4. Return Map of errorType -> count
      *
-     * Note: Stops after MAX_BREAKDOWN_MESSAGES so very large DLQs stay responsive.
+     * Note: Stops after MAX_SCAN_MESSAGES so very large DLQs stay responsive.
      *
      * @param dlqTopicId UUID of the DLQ topic
      * @return Map where key = error type, value = count of messages with that error
@@ -270,9 +358,9 @@ public class DlqBrowserService {
             Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
 
             for (TopicPartition partition : partitions) {
-                long remaining = MAX_BREAKDOWN_MESSAGES - totalMessagesRead[0];
+                long remaining = MAX_SCAN_MESSAGES - totalMessagesRead[0];
                 if (remaining <= 0) {
-                    log.warn("Error breakdown for {} stopped at {} messages", topicName, MAX_BREAKDOWN_MESSAGES);
+                    log.warn("Error breakdown for {} stopped at {} messages", topicName, MAX_SCAN_MESSAGES);
                     break;
                 }
 

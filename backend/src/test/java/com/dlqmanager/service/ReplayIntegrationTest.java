@@ -103,6 +103,10 @@ class ReplayIntegrationTest extends IntegrationTestBase {
         assertThat(counts.total()).isEqualTo(2);
         assertThat(counts.replayed()).isEqualTo(2);
         assertThat(counts.pending()).isZero();
+
+        // "Hide replayed" filter leaves nothing to show
+        assertThat(dlqBrowserService.searchMessages(id, new MessageFilter(null, null, true), 1, 10).matching())
+                .isZero();
     }
 
     @Test

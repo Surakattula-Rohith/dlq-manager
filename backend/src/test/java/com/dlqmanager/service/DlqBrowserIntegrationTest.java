@@ -88,6 +88,34 @@ class DlqBrowserIntegrationTest extends IntegrationTestBase {
         ));
     }
 
+    @Test
+    void searchFindsMatchesAcrossPartitionsAndPages() throws Exception {
+        String dlq = uniqueTopic("orders-dlq");
+        createTopic(dlq, 3);
+        produce(dlq, 0, 6, Map.of("X-Error-Message", "DB Connection Timeout"));
+        produce(dlq, 1, 4, Map.of("X-Error-Message", "Validation Failed"));
+        produce(dlq, 2, 5, Map.of("X-Error-Message", "DB Connection Timeout"));
+        UUID id = register(dlq);
+
+        // Error type filter: 11 matches spread over partitions 0 and 2 -> 2 pages of 10
+        MessageFilter byError = new MessageFilter(null, "DB Connection Timeout", false);
+        DlqBrowserService.SearchResult page1 = dlqBrowserService.searchMessages(id, byError, 1, 10);
+        DlqBrowserService.SearchResult page2 = dlqBrowserService.searchMessages(id, byError, 2, 10);
+
+        assertThat(page1.matching()).isEqualTo(11);
+        assertThat(page1.messages()).hasSize(10)
+                .allMatch(m -> "DB Connection Timeout".equals(m.getErrorMessage()));
+        assertThat(page2.messages()).hasSize(1);
+        assertThat(page1.scanLimitReached()).isFalse();
+
+        // Text search (keys look like ORD-<partition>-<n>), case-insensitive
+        DlqBrowserService.SearchResult byKey = dlqBrowserService.searchMessages(
+                id, new MessageFilter("ord-1-", null, false), 1, 10);
+
+        assertThat(byKey.matching()).isEqualTo(4);
+        assertThat(byKey.messages()).allMatch(m -> m.getPartition() == 1);
+    }
+
     private UUID register(String dlqTopicName) {
         DlqTopic topic = new DlqTopic();
         topic.setDlqTopicName(dlqTopicName);

@@ -8,6 +8,7 @@ import com.dlqmanager.model.dto.UpdateDlqRequest;
 import com.dlqmanager.model.entity.DlqTopic;
 import com.dlqmanager.service.DlqBrowserService;
 import com.dlqmanager.service.DlqDiscoveryService;
+import com.dlqmanager.service.MessageFilter;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -229,15 +230,18 @@ public class DlqTopicController {
     }
 
     /**
-     * Browse messages from a DLQ topic with pagination
+     * Browse messages from a DLQ topic with pagination, optionally filtered
      *
-     * GET /api/dlq-topics/{id}/messages?page=1&size=10
+     * GET /api/dlq-topics/{id}/messages?page=1&size=10&search=ORD-1&errorType=DB%20Connection%20Timeout&pendingOnly=true
      *
      * Purpose: Fetch messages from the DLQ for viewing
      *
      * Query Parameters:
      * - page: Page number (1-based, default: 1)
      * - size: Messages per page (default: 10, max: 100)
+     * - search: Optional text to find in the key, payload or headers (case-insensitive)
+     * - errorType: Optional exact error type from the error breakdown
+     * - pendingOnly: Optional, true hides messages that were already replayed
      *
      * @param id The UUID of the DLQ topic
      * @param page Page number (optional, default 1)
@@ -248,7 +252,10 @@ public class DlqTopicController {
     public ResponseEntity<Map<String, Object>> getMessages(
         @PathVariable UUID id,
         @RequestParam(defaultValue = "1") int page,
-        @RequestParam(defaultValue = "10") int size
+        @RequestParam(defaultValue = "10") int size,
+        @RequestParam(required = false) String search,
+        @RequestParam(required = false) String errorType,
+        @RequestParam(defaultValue = "false") boolean pendingOnly
     ) {
         log.info("API: GET /api/dlq-topics/{}/messages?page={}&size={}", id, page, size);
 
@@ -259,31 +266,53 @@ public class DlqTopicController {
         if (size < 1 || size > 100) {
             return createErrorResponse(HttpStatus.BAD_REQUEST, "Page size must be between 1 and 100");
         }
+        if (search != null && search.length() > 200) {
+            return createErrorResponse(HttpStatus.BAD_REQUEST, "Search text must be at most 200 characters");
+        }
 
         try {
-            // Fetch messages from Kafka
-            List<DlqMessageDto> messages = dlqBrowserService.getMessages(id, page, size);
+            MessageFilter filter = new MessageFilter(search, errorType, pendingOnly);
 
             // Get counts for pagination metadata
             // total = everything stored in Kafka (all browsable), pending = not yet replayed
             DlqBrowserService.MessageCounts counts = dlqBrowserService.getMessageCounts(id);
-            long totalMessages = counts.total();
-            int totalPages = (int) Math.ceil((double) totalMessages / size);
+
+            List<DlqMessageDto> messages;
+            long matchingMessages;
+            boolean scanLimitReached = false;
+
+            if (filter.isActive()) {
+                // Filtered: every message has to be checked
+                DlqBrowserService.SearchResult result = dlqBrowserService.searchMessages(id, filter, page, size);
+                messages = result.messages();
+                matchingMessages = result.matching();
+                scanLimitReached = result.scanLimitReached();
+            } else {
+                // Unfiltered: jump straight to the page
+                messages = dlqBrowserService.getMessages(id, page, size);
+                matchingMessages = counts.total();
+            }
+
+            int totalPages = (int) Math.ceil((double) matchingMessages / size);
 
             // Build response with pagination metadata
+            Map<String, Object> pagination = new LinkedHashMap<>();
+            pagination.put("currentPage", page);
+            pagination.put("pageSize", size);
+            pagination.put("totalMessages", counts.total());
+            pagination.put("pendingMessages", counts.pending());
+            pagination.put("replayedMessages", counts.replayed());
+            pagination.put("matchingMessages", matchingMessages);
+            pagination.put("filtered", filter.isActive());
+            pagination.put("scanLimitReached", scanLimitReached);
+            pagination.put("totalPages", totalPages);
+            pagination.put("hasNextPage", page < totalPages);
+            pagination.put("hasPreviousPage", page > 1);
+
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("messages", messages);
-            response.put("pagination", Map.of(
-                "currentPage", page,
-                "pageSize", size,
-                "totalMessages", totalMessages,
-                "pendingMessages", counts.pending(),
-                "replayedMessages", counts.replayed(),
-                "totalPages", totalPages,
-                "hasNextPage", page < totalPages,
-                "hasPreviousPage", page > 1
-            ));
+            response.put("pagination", pagination);
 
             log.info("Successfully fetched {} messages for DLQ topic {}", messages.size(), id);
             return ResponseEntity.ok(response);
