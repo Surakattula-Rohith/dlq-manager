@@ -195,7 +195,8 @@ CI runs the full backend suite plus frontend lint and build on every push.
 | `POST` | `/api/dlq-topics` | Register new DLQ topic |
 | `PUT` | `/api/dlq-topics/{id}` | Update DLQ configuration |
 | `DELETE` | `/api/dlq-topics/{id}` | Delete DLQ registration |
-| `GET` | `/api/dlq-topics/{id}/messages` | Browse messages (paginated) |
+| `GET` | `/api/dlq-topics/{id}/messages` | Browse messages (paginated; optional `search`, `errorType`, `pendingOnly` filters) |
+| `GET` | `/api/dlq-topics/{id}/messages/export` | Download messages as `format=csv` or `format=json` (same filters) |
 | `GET` | `/api/dlq-topics/{id}/error-breakdown` | Error type statistics |
 
 ### Replay

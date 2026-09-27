@@ -108,15 +108,52 @@ public class DlqBrowserService {
         log.info("Searching DLQ topic ID: {} with {}, page: {}, size: {}", dlqTopicId, filter, page, size);
 
         DlqTopic dlqTopic = findDlqTopic(dlqTopicId);
-        String topicName = dlqTopic.getDlqTopicName();
-        String errorFieldPath = dlqTopic.getErrorFieldPath();
         Map<String, LocalDateTime> replayedOffsets = replayMessageRepository.findReplayedOffsets(dlqTopicId);
 
         long firstMatch = (long) (page - 1) * size;
         List<DlqMessageDto> pageMessages = new ArrayList<>();
         long[] matching = {0};
+
+        boolean scanLimitReached = scanMatching(dlqTopic, filter, replayedOffsets, record -> {
+            long matchIndex = matching[0]++;
+            if (matchIndex >= firstMatch && matchIndex < firstMatch + size) {
+                pageMessages.add(toDto(record, dlqTopic, replayedOffsets));
+            }
+        });
+
+        return new SearchResult(pageMessages, matching[0], scanLimitReached);
+    }
+
+    /**
+     * Hand every message that matches the filter to the handler, one at a time
+     *
+     * Used for export: messages are streamed straight to the response,
+     * so nothing is collected in memory.
+     *
+     * @param dlqTopicId UUID of the DLQ topic
+     * @param filter     what to include (MessageFilter.none() for everything)
+     * @param handler    called for each matching message, in partition/offset order
+     * @return true if the DLQ was too big to check every message
+     */
+    public boolean forEachMatchingMessage(UUID dlqTopicId, MessageFilter filter, Consumer<DlqMessageDto> handler) {
+        DlqTopic dlqTopic = findDlqTopic(dlqTopicId);
+        Map<String, LocalDateTime> replayedOffsets = replayMessageRepository.findReplayedOffsets(dlqTopicId);
+
+        return scanMatching(dlqTopic, filter, replayedOffsets,
+                record -> handler.accept(toDto(record, dlqTopic, replayedOffsets)));
+    }
+
+    /**
+     * Read every message of a topic (up to MAX_SCAN_MESSAGES) and pass the ones matching the filter on
+     *
+     * @return true if the scan stopped at MAX_SCAN_MESSAGES
+     */
+    private boolean scanMatching(DlqTopic dlqTopic, MessageFilter filter, Map<String, LocalDateTime> replayedOffsets,
+                                 Consumer<ConsumerRecord<String, String>> onMatch) {
+        String topicName = dlqTopic.getDlqTopicName();
+        String errorFieldPath = dlqTopic.getErrorFieldPath();
         long[] scanned = {0};
-        boolean scanLimitReached = false;
+        long[] matched = {0};
 
         try (KafkaConsumer<String, String> consumer = createConsumer()) {
             List<TopicPartition> partitions = getPartitions(consumer, topicName);
@@ -126,8 +163,6 @@ public class DlqBrowserService {
             for (TopicPartition partition : partitions) {
                 long remaining = MAX_SCAN_MESSAGES - scanned[0];
                 if (remaining <= 0) {
-                    scanLimitReached = true;
-                    log.warn("Search in {} stopped at {} messages", topicName, MAX_SCAN_MESSAGES);
                     break;
                 }
 
@@ -142,31 +177,32 @@ public class DlqBrowserService {
                     boolean replayed = replayedOffsets.containsKey(
                             ReplayMessageRepository.offsetKey(record.partition(), record.offset()));
 
-                    if (!filter.matches(record, headers, errorType, replayed)) {
-                        return;
-                    }
-
-                    long matchIndex = matching[0]++;
-                    if (matchIndex >= firstMatch && matchIndex < firstMatch + size) {
-                        DlqMessageDto dto = DlqMessageDto.fromConsumerRecord(record, errorFieldPath);
-                        markReplayed(dto, replayedOffsets);
-                        pageMessages.add(dto);
+                    if (filter.matches(record, headers, errorType, replayed)) {
+                        matched[0]++;
+                        onMatch.accept(record);
                     }
                 });
             }
 
-            if (scanned[0] >= MAX_SCAN_MESSAGES) {
-                scanLimitReached = true;
-            }
-
-            log.info("Search in {} checked {} messages, {} matched", topicName, scanned[0], matching[0]);
-
         } catch (Exception e) {
-            log.error("Error searching messages", e);
-            throw new RuntimeException("Failed to search messages in topic: " + topicName, e);
+            log.error("Error scanning messages", e);
+            throw new RuntimeException("Failed to scan messages in topic: " + topicName, e);
         }
 
-        return new SearchResult(pageMessages, matching[0], scanLimitReached);
+        boolean scanLimitReached = scanned[0] >= MAX_SCAN_MESSAGES;
+        if (scanLimitReached) {
+            log.warn("Scan of {} stopped at {} messages", topicName, MAX_SCAN_MESSAGES);
+        }
+        log.info("Scanned {} messages in {}, {} matched", scanned[0], topicName, matched[0]);
+
+        return scanLimitReached;
+    }
+
+    private DlqMessageDto toDto(ConsumerRecord<String, String> record, DlqTopic dlqTopic,
+                                Map<String, LocalDateTime> replayedOffsets) {
+        DlqMessageDto dto = DlqMessageDto.fromConsumerRecord(record, dlqTopic.getErrorFieldPath());
+        markReplayed(dto, replayedOffsets);
+        return dto;
     }
 
     /**

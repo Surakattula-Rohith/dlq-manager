@@ -8,14 +8,28 @@ import com.dlqmanager.model.dto.UpdateDlqRequest;
 import com.dlqmanager.model.entity.DlqTopic;
 import com.dlqmanager.service.DlqBrowserService;
 import com.dlqmanager.service.DlqDiscoveryService;
+import com.dlqmanager.service.MessageExportWriter;
 import com.dlqmanager.service.MessageFilter;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.UncheckedIOException;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -29,8 +43,11 @@ import java.util.stream.Collectors;
 @Slf4j
 public class DlqTopicController {
 
+    private static final DateTimeFormatter EXPORT_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+
     private final DlqDiscoveryService dlqDiscoveryService;
     private final DlqBrowserService dlqBrowserService;
+    private final MessageExportWriter messageExportWriter;
 
     /**
      * List all registered DLQ topics
@@ -326,6 +343,83 @@ public class DlqTopicController {
             return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Failed to fetch messages: " + e.getMessage());
         }
+    }
+
+    /**
+     * Download messages as CSV or JSON
+     *
+     * GET /api/dlq-topics/{id}/messages/export?format=csv&search=...&errorType=...&pendingOnly=true
+     *
+     * Takes the same filters as the message browser, so the download contains exactly
+     * what is on screen (all pages, not just the current one). Messages are streamed
+     * to the response one by one, so a big DLQ never has to fit in memory.
+     *
+     * @param id     The UUID of the DLQ topic
+     * @param format "csv" (default) or "json"
+     * @return a file download
+     */
+    @GetMapping("/{id}/messages/export")
+    public ResponseEntity<StreamingResponseBody> exportMessages(
+        @PathVariable UUID id,
+        @RequestParam(defaultValue = "csv") String format,
+        @RequestParam(required = false) String search,
+        @RequestParam(required = false) String errorType,
+        @RequestParam(defaultValue = "false") boolean pendingOnly
+    ) {
+        log.info("API: GET /api/dlq-topics/{}/messages/export?format={}", id, format);
+
+        // The return type must stay ResponseEntity<StreamingResponseBody> for Spring to stream it,
+        // so errors are reported with ResponseStatusException instead of an error body
+        boolean csv = "csv".equalsIgnoreCase(format);
+        if (!csv && !"json".equalsIgnoreCase(format)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "format must be csv or json");
+        }
+
+        DlqTopic dlqTopic;
+        try {
+            dlqTopic = dlqDiscoveryService.getDlqTopicById(id);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        }
+
+        MessageFilter filter = new MessageFilter(search, errorType, pendingOnly);
+        String fileName = dlqTopic.getDlqTopicName() + "-" + EXPORT_TIMESTAMP.format(LocalDateTime.now())
+                + (csv ? ".csv" : ".json");
+
+        StreamingResponseBody body = outputStream -> {
+            Writer out = new BufferedWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8));
+            boolean[] first = {true};
+
+            if (csv) {
+                messageExportWriter.writeCsvHeader(out);
+            } else {
+                messageExportWriter.writeJsonStart(out);
+            }
+
+            dlqBrowserService.forEachMatchingMessage(id, filter, message -> {
+                try {
+                    if (csv) {
+                        messageExportWriter.writeCsvRow(out, message);
+                    } else {
+                        messageExportWriter.writeJsonItem(out, message, first[0]);
+                        first[0] = false;
+                    }
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+
+            if (!csv) {
+                messageExportWriter.writeJsonEnd(out);
+            }
+            out.flush();
+        };
+
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION,
+                    ContentDisposition.attachment().filename(fileName).build().toString())
+            .contentType(csv ? new MediaType("text", "csv", StandardCharsets.UTF_8) : MediaType.APPLICATION_JSON)
+            .body(body);
     }
 
     /**
