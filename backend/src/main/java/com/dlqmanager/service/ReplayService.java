@@ -20,6 +20,7 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -45,11 +46,16 @@ import java.util.*;
  * 7. Create ReplayMessage record with result
  * 8. Return ReplayJobDto to caller
  *
- * Why no @Transactional here?
+ * Why no @Transactional on the replay methods?
  * - The replay records are our audit trail
  * - If the whole method ran in one transaction, a failed replay would roll back
  *   the FAILED job record too, and failures would never show up in Replay History
  * - Each save() commits on its own, so success AND failure are always recorded
+ *
+ * Note: we keep working with our own ReplayJob instance and ignore what save() returns.
+ * For an existing entity save() returns a merged copy whose DlqTopic is a lazy proxy,
+ * and reading it after the save's transaction has closed throws LazyInitializationException
+ * (it only worked inside web requests because of Spring's open-session-in-view).
  */
 @Service
 @Slf4j
@@ -124,14 +130,14 @@ public class ReplayService {
         replayJob.setTotalMessages(1);  // Single message
         replayJob.setSucceeded(0);
         replayJob.setFailed(0);
-        replayJob = replayJobRepository.save(replayJob);
+        replayJobRepository.save(replayJob);
         log.info("Created replay job with ID: {}", replayJob.getId());
 
         try (KafkaConsumer<String, String> consumer = createConsumer()) {
             // Step 4: Update status to RUNNING
             replayJob.setStatus(ReplayStatus.RUNNING);
             replayJob.setStartedAt(LocalDateTime.now());
-            replayJob = replayJobRepository.save(replayJob);
+            replayJobRepository.save(replayJob);
 
             // Step 5: Read message from DLQ
             log.info("Reading message from DLQ topic: {}, offset: {}, partition: {}",
@@ -172,7 +178,7 @@ public class ReplayService {
             replayJob.setSucceeded(1);
             replayJob.setStatus(ReplayStatus.COMPLETED);
             replayJob.setCompletedAt(LocalDateTime.now());
-            replayJob = replayJobRepository.save(replayJob);
+            replayJobRepository.save(replayJob);
 
             // Step 8: Create ReplayMessage record - SUCCESS
             createReplayMessageRecord(
@@ -193,7 +199,7 @@ public class ReplayService {
             replayJob.setFailed(1);
             replayJob.setStatus(ReplayStatus.FAILED);
             replayJob.setCompletedAt(LocalDateTime.now());
-            replayJob = replayJobRepository.save(replayJob);
+            replayJobRepository.save(replayJob);
 
             // Create ReplayMessage record - FAILED
             createReplayMessageRecord(
@@ -257,13 +263,13 @@ public class ReplayService {
         replayJob.setTotalMessages(request.getMessages().size());
         replayJob.setSucceeded(0);
         replayJob.setFailed(0);
-        replayJob = replayJobRepository.save(replayJob);
+        replayJobRepository.save(replayJob);
         log.info("Created bulk replay job with ID: {}", replayJob.getId());
 
         // Step 3: Update status to RUNNING
         replayJob.setStatus(ReplayStatus.RUNNING);
         replayJob.setStartedAt(LocalDateTime.now());
-        replayJob = replayJobRepository.save(replayJob);
+        replayJobRepository.save(replayJob);
 
         int successCount = 0;
         int failureCount = 0;
@@ -366,7 +372,7 @@ public class ReplayService {
         replayJob.setFailed(failureCount);
         replayJob.setStatus(ReplayStatus.COMPLETED);
         replayJob.setCompletedAt(LocalDateTime.now());
-        replayJob = replayJobRepository.save(replayJob);
+        replayJobRepository.save(replayJob);
 
         log.info("Bulk replay completed. Job ID: {}, Succeeded: {}, Failed: {}",
                 replayJob.getId(), successCount, failureCount);
@@ -476,6 +482,7 @@ public class ReplayService {
      * @return ReplayJobDto with job details
      * @throws RuntimeException if job not found
      */
+    @Transactional(readOnly = true)
     public ReplayJobDto getReplayJob(UUID jobId) {
         log.info("Fetching replay job: {}", jobId);
 
@@ -490,6 +497,7 @@ public class ReplayService {
      *
      * @return List of ReplayJobDto
      */
+    @Transactional(readOnly = true)
     public List<ReplayJobDto> getReplayHistory() {
         log.info("Fetching replay history");
 
@@ -506,6 +514,7 @@ public class ReplayService {
      * @param dlqTopicId UUID of the DLQ topic
      * @return List of ReplayJobDto for that DLQ
      */
+    @Transactional(readOnly = true)
     public List<ReplayJobDto> getReplayHistoryForDlq(UUID dlqTopicId) {
         log.info("Fetching replay history for DLQ topic: {}", dlqTopicId);
 
