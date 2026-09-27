@@ -1,5 +1,6 @@
 # Kafka DLQ Manager
 
+[![CI](https://github.com/Surakattula-Rohith/dlq-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/Surakattula-Rohith/dlq-manager/actions/workflows/ci.yml)
 ![Java](https://img.shields.io/badge/Java-21%2B-blue)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-brightgreen)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
@@ -105,6 +106,19 @@ cd frontend && FRONTEND_PORT=5174 BACKEND_URL=http://localhost:8081 npm run dev
 ```
 
 Backend variables: `SERVER_PORT`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS`, `SHOW_SQL`, `LOG_LEVEL`.
+
+---
+
+## Running Tests
+
+```bash
+cd backend && ./mvnw test
+```
+
+- **Unit tests** — header parsing, message conversion, alert rules, webhook safety (no infrastructure needed)
+- **Integration tests** — run against real PostgreSQL and Kafka started automatically with [Testcontainers](https://testcontainers.com) (Docker must be running): multi-partition paging, paging after retention, replay, duplicate-replay protection
+
+CI runs the full backend suite plus frontend lint and build on every push.
 
 ---
 

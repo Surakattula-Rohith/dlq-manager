@@ -70,8 +70,8 @@
 - [ ] Prometheus metrics endpoint
 
 ### Developer Experience
-- [ ] Unit and integration tests
-- [ ] CI/CD pipeline (GitHub Actions)
+- [x] Unit and integration tests
+- [x] CI pipeline (GitHub Actions)
 - [ ] OpenAPI / Swagger docs (`springdoc-openapi-starter-webmvc-ui`)
 
 ---
