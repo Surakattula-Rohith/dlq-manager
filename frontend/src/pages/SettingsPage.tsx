@@ -17,10 +17,11 @@ export function SettingsPage() {
     queryFn: kafkaApi.getConfig,
   });
 
+  // Always check the connection: the address can come from the server's environment
+  // (KAFKA_BOOTSTRAP_SERVERS in Docker) even when nothing was saved from this page
   const { data: clusterInfo, isLoading: loadingCluster, error: clusterError } = useQuery({
     queryKey: ['clusterInfo'],
     queryFn: kafkaApi.getClusterInfo,
-    enabled: kafkaConfig?.configured !== false,
     retry: false,
   });
 
@@ -47,7 +48,8 @@ export function SettingsPage() {
   });
 
   const isConnected = !clusterError && clusterInfo;
-  const isFirstTime = kafkaConfig && !kafkaConfig.configured;
+  // First-time setup only when nothing was saved and the default address doesn't work either
+  const isFirstTime = kafkaConfig && !kafkaConfig.configured && !loadingCluster && !isConnected;
 
   if (loadingConfig) {
     return (
@@ -199,23 +201,34 @@ export function SettingsPage() {
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Connection Status</h3>
 
           <div className="flex items-center gap-4 mb-6">
-            <div className={`p-3 rounded-lg ${isConnected ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
-              {isConnected ? (
-                <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
-              ) : (
-                <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
-              )}
-            </div>
-            <div>
-              <p className={`font-medium ${isConnected ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                {isConnected ? 'Connected to Kafka' : 'Connection Failed'}
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {isConnected
-                  ? `Cluster ID: ${clusterInfo?.clusterId || 'N/A'}`
-                  : 'Unable to connect to Kafka cluster'}
-              </p>
-            </div>
+            {loadingCluster ? (
+              <>
+                <div className="p-3 rounded-lg bg-gray-100 dark:bg-gray-700">
+                  <Loader2 className="w-6 h-6 text-gray-500 dark:text-gray-400 animate-spin" />
+                </div>
+                <p className="font-medium text-gray-600 dark:text-gray-300">Checking connection...</p>
+              </>
+            ) : (
+              <>
+                <div className={`p-3 rounded-lg ${isConnected ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                  {isConnected ? (
+                    <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+                  ) : (
+                    <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
+                  )}
+                </div>
+                <div>
+                  <p className={`font-medium ${isConnected ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                    {isConnected ? 'Connected to Kafka' : 'Connection Failed'}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {isConnected
+                      ? `Cluster ID: ${clusterInfo?.clusterId || 'N/A'}`
+                      : 'Unable to connect to Kafka cluster'}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
 
           {loadingCluster ? (
