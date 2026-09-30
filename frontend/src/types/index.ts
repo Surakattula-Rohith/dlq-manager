@@ -160,3 +160,13 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
+
+// Sign-in
+export type Role = 'VIEWER' | 'OPERATOR' | 'ADMIN';
+
+export interface AuthSession {
+  authenticated: boolean;
+  username?: string;
+  role?: Role;
+  demoAccounts: boolean;
+}

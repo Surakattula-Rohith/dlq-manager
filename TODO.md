@@ -29,12 +29,12 @@
 
 ---
 
-## v5.0 — Authentication & RBAC
+## v5.0 — Team Access
 
-- [ ] User authentication (username/password or OAuth)
-- [ ] Role-based access control (Admin, Viewer, Operator)
-- [ ] Audit log for all user actions
-- [ ] API key authentication for programmatic access
+- [x] Sign-in for the UI and API (session cookie for the browser, HTTP Basic for scripts, CSRF protection)
+- [ ] Role-based access control (Viewer, Operator, Admin) enforced by the API
+- [ ] Single sign-on with the company identity provider (OpenID Connect)
+- [ ] Audit log with the real user for every action
 
 ---
 

@@ -5,8 +5,10 @@ import {
   History,
   Bell,
   Settings,
-  Database
+  Database,
+  LogOut
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -17,6 +19,8 @@ const navItems = [
 ];
 
 export function Sidebar() {
+  const { session, logout } = useAuth();
+
   return (
     <aside className="w-64 bg-gray-900 text-white min-h-screen flex flex-col border-r border-gray-800">
       {/* Logo */}
@@ -52,6 +56,27 @@ export function Sidebar() {
           ))}
         </ul>
       </nav>
+
+      {/* Signed-in user */}
+      {session?.username && (
+        <div className="px-4 py-3 border-t border-gray-800 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center text-sm font-semibold uppercase">
+            {session.username.charAt(0)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{session.username}</p>
+            <p className="text-xs text-gray-400 capitalize">{session.role?.toLowerCase()}</p>
+          </div>
+          <button
+            onClick={logout}
+            className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+            aria-label="Sign out"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="p-4 border-t border-gray-800">

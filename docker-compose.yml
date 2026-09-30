@@ -70,6 +70,10 @@ services:
       DB_USERNAME: dlquser
       DB_PASSWORD: dlqpass
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # Demo sign-in passwords - set your own before sharing the app with a team
+      DLQ_ADMIN_PASSWORD: ${DLQ_ADMIN_PASSWORD:-admin}
+      DLQ_OPERATOR_PASSWORD: ${DLQ_OPERATOR_PASSWORD:-operator}
+      DLQ_VIEWER_PASSWORD: ${DLQ_VIEWER_PASSWORD:-viewer}
     restart: unless-stopped
     networks:
       - dlq-network

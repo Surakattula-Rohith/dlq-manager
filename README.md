@@ -90,7 +90,7 @@ cd dlq-manager
 docker compose up --build
 ```
 
-Open **http://localhost:3000**. The UI, API, Kafka and PostgreSQL all run in containers, so no Java or Node is needed. The backend is already pointed at Kafka (`kafka:29092` inside Docker).
+Open **http://localhost:3000** and sign in with a demo account (`admin` / `admin`, `operator` / `operator` or `viewer` / `viewer`). The UI, API, Kafka and PostgreSQL all run in containers, so no Java or Node is needed. The backend is already pointed at Kafka (`kafka:29092` inside Docker).
 
 ### Run from source (development)
 
@@ -119,6 +119,24 @@ cd frontend && FRONTEND_PORT=5174 BACKEND_URL=http://localhost:8081 npm run dev
 
 Backend variables: `SERVER_PORT`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS`, `SHOW_SQL`, `LOG_LEVEL`.
 
+### Sign-in
+
+Every page and API call needs a signed-in user. Three demo accounts exist out of the box, with the password equal to the username: `admin`, `operator` and `viewer`.
+
+**Before sharing the app with a team**, change the passwords:
+
+```bash
+DLQ_ADMIN_PASSWORD=... DLQ_OPERATOR_PASSWORD=... DLQ_VIEWER_PASSWORD=... docker compose up -d
+```
+
+To use your own accounts instead, set `DLQ_AUTH_USERS_0_USERNAME`, `DLQ_AUTH_USERS_0_PASSWORD`, `DLQ_AUTH_USERS_0_ROLE` (`VIEWER`, `OPERATOR` or `ADMIN`), then `DLQ_AUTH_USERS_1_...` and so on. This replaces the demo accounts. Passwords can also be given as a bcrypt hash (`{bcrypt}$2a$10$...`).
+
+The web UI keeps you signed in with a session cookie (8 hours, `SESSION_TIMEOUT`). Set `SESSION_COOKIE_SECURE=true` when the app is served over HTTPS. Scripts can call the API with HTTP Basic instead:
+
+```bash
+curl -u viewer:viewer http://localhost:3000/api/dlq-topics     # :8080 when running from source
+```
+
 ---
 
 ## Running Tests
@@ -128,7 +146,7 @@ cd backend && ./mvnw test
 ```
 
 - **Unit tests** — header parsing, message conversion, alert rules, webhook safety (no infrastructure needed)
-- **Integration tests** — run against real PostgreSQL and Kafka started automatically with [Testcontainers](https://testcontainers.com) (Docker must be running): multi-partition paging, paging after retention, replay, duplicate-replay protection
+- **Integration tests** — run against real PostgreSQL and Kafka started automatically with [Testcontainers](https://testcontainers.com) (Docker must be running): multi-partition paging, paging after retention, replay, duplicate-replay protection, sign-in and CSRF protection
 
 CI runs the full backend suite plus frontend lint and build on every push.
 
@@ -187,6 +205,15 @@ CI runs the full backend suite plus frontend lint and build on every push.
 
 <details>
 <summary><strong>Endpoints</strong></summary>
+
+### Sign-in
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/auth/login` | Sign in (form fields `username`, `password`) and start a session |
+| `POST` | `/api/auth/logout` | Sign out |
+| `GET` | `/api/auth/me` | Who is signed in |
+
+All other endpoints need a session (the web UI) or HTTP Basic credentials (scripts).
 
 ### DLQ Topics
 | Method | Endpoint | Description |
