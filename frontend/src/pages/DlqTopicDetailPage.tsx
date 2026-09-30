@@ -5,6 +5,7 @@ import { Header } from '../components/layout';
 import { dlqTopicsApi } from '../api/dlqTopics';
 import { replayApi } from '../api/replay';
 import type { DlqMessage } from '../types';
+import { usePermissions } from '../context/AuthContext';
 import {
   ArrowLeft,
   Play,
@@ -23,6 +24,7 @@ import {
 export function DlqTopicDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { canOperate } = usePermissions();
   const [page, setPage] = useState(1);
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [expandedMessage, setExpandedMessage] = useState<DlqMessage | null>(null);
@@ -325,7 +327,11 @@ export function DlqTopicDetailPage() {
         {/* Actions Bar */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
-            {selectedMessages.size === 0 ? (
+            {!canOperate ? (
+              <span className="text-sm text-gray-400 dark:text-gray-500 italic">
+                View only - replaying messages needs the operator role
+              </span>
+            ) : selectedMessages.size === 0 ? (
               <span className="text-sm text-gray-400 dark:text-gray-500 italic">
                 Select messages to replay them to the source topic
               </span>
@@ -362,6 +368,7 @@ export function DlqTopicDetailPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-gray-700">
                   <tr>
+                    {canOperate && (
                     <th className="px-4 py-3 text-left">
                       <button
                         onClick={handleSelectAll}
@@ -376,6 +383,7 @@ export function DlqTopicDetailPage() {
                         <span className="text-xs font-medium uppercase tracking-wider">Replay</span>
                       </button>
                     </th>
+                    )}
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Offset</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Partition</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Key</th>
@@ -394,6 +402,7 @@ export function DlqTopicDetailPage() {
                         key={key}
                         className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${isSelected ? 'bg-orange-50 dark:bg-orange-900/20' : ''}`}
                       >
+                        {canOperate && (
                         <td className="px-4 py-4">
                           <button
                             onClick={() => handleSelectMessage(message)}
@@ -408,6 +417,7 @@ export function DlqTopicDetailPage() {
                             )}
                           </button>
                         </td>
+                        )}
                         <td className="px-4 py-4 whitespace-nowrap font-mono text-sm text-gray-900 dark:text-gray-200">
                           <div className="flex items-center gap-2">
                             {message.offset}
@@ -613,14 +623,16 @@ export function DlqTopicDetailPage() {
               >
                 Close
               </button>
-              <button
-                onClick={() => handleReplayFromModal(expandedMessage)}
-                disabled={replayMutation.isPending}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-              >
-                <Play className="w-4 h-4" />
-                {expandedMessage.replayed ? 'Replay Again' : 'Replay This Message'}
-              </button>
+              {canOperate && (
+                <button
+                  onClick={() => handleReplayFromModal(expandedMessage)}
+                  disabled={replayMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  <Play className="w-4 h-4" />
+                  {expandedMessage.replayed ? 'Replay Again' : 'Replay This Message'}
+                </button>
+              )}
             </div>
           </div>
         </div>

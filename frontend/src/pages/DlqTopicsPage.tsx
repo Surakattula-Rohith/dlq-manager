@@ -14,9 +14,11 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDate } from '../utils/date';
+import { usePermissions } from '../context/AuthContext';
 
 export function DlqTopicsPage() {
   const queryClient = useQueryClient();
+  const { canAdminister } = usePermissions();
   const [showModal, setShowModal] = useState(false);
   const [editingTopic, setEditingTopic] = useState<DlqTopic | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -76,16 +78,18 @@ export function DlqTopicsPage() {
               className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-64"
             />
           </div>
-          <button
-            onClick={() => {
-              setEditingTopic(null);
-              setShowModal(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add DLQ Topic
-          </button>
+          {canAdminister && (
+            <button
+              onClick={() => {
+                setEditingTopic(null);
+                setShowModal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add DLQ Topic
+            </button>
+          )}
         </div>
 
         {/* Topics Table */}
@@ -147,20 +151,24 @@ export function DlqTopicsPage() {
                           >
                             <Eye className="w-4 h-4" />
                           </Link>
-                          <button
-                            onClick={() => handleEdit(topic)}
-                            className="p-2 text-gray-500 dark:text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                            title="Edit"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(topic.id, topic.dlqTopicName)}
-                            className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {canAdminister && (
+                            <>
+                              <button
+                                onClick={() => handleEdit(topic)}
+                                className="p-2 text-gray-500 dark:text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                title="Edit"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(topic.id, topic.dlqTopicName)}
+                                className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -10,6 +10,7 @@ import {
   Clock, AlertTriangle, Activity, Loader2, X, ChevronDown
 } from 'lucide-react';
 import { formatDateTime } from '../utils/date';
+import { usePermissions } from '../context/AuthContext';
 
 const cardClass = 'bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700';
 const inputClass = 'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500';
@@ -18,6 +19,7 @@ const labelClass = 'block text-sm font-medium text-gray-700 dark:text-gray-300 m
 type Tab = 'rules' | 'history';
 
 export function AlertsPage() {
+  const { canOperate, canAdminister } = usePermissions();
   const [tab, setTab] = useState<Tab>('rules');
   const [showRuleModal, setShowRuleModal] = useState(false);
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
@@ -100,14 +102,16 @@ export function AlertsPage() {
         {/* Rules tab */}
         {tab === 'rules' && (
           <div>
-            <div className="flex justify-end mb-4">
-              <button
-                onClick={() => { setEditingRule(null); setShowRuleModal(true); }}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
-              >
-                <Plus className="w-4 h-4" /> Add Rule
-              </button>
-            </div>
+            {canAdminister && (
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={() => { setEditingRule(null); setShowRuleModal(true); }}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                >
+                  <Plus className="w-4 h-4" /> Add Rule
+                </button>
+              </div>
+            )}
 
             <div className={cardClass}>
               {loadingRules ? (
@@ -119,12 +123,14 @@ export function AlertsPage() {
                 <div className="p-8 text-center">
                   <Bell className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
                   <p className="text-gray-500 dark:text-gray-400">No alert rules configured.</p>
-                  <button
-                    onClick={() => { setEditingRule(null); setShowRuleModal(true); }}
-                    className="mt-3 text-orange-500 hover:text-orange-600 text-sm font-medium"
-                  >
-                    + Add your first rule
-                  </button>
+                  {canAdminister && (
+                    <button
+                      onClick={() => { setEditingRule(null); setShowRuleModal(true); }}
+                      className="mt-3 text-orange-500 hover:text-orange-600 text-sm font-medium"
+                    >
+                      + Add your first rule
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -137,7 +143,9 @@ export function AlertsPage() {
                         <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Condition</th>
                         <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Channel</th>
                         <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Status</th>
-                        <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Actions</th>
+                        {canAdminister && (
+                          <th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Actions</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -178,6 +186,7 @@ export function AlertsPage() {
                               {rule.enabled ? 'Enabled' : 'Disabled'}
                             </span>
                           </td>
+                          {canAdminister && (
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <button
@@ -201,6 +210,7 @@ export function AlertsPage() {
                               </button>
                             </div>
                           </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -250,7 +260,7 @@ export function AlertsPage() {
                           {formatDateTime(event.triggeredAt)}
                         </td>
                         <td className="px-4 py-3">
-                          {event.status === 'FIRING' && (
+                          {event.status === 'FIRING' && canOperate && (
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => acknowledgeMutation.mutate(event.id)}

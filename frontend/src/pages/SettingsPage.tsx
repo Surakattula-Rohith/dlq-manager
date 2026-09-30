@@ -5,10 +5,12 @@ import { kafkaApi } from '../api/kafka';
 import { notificationChannelsApi } from '../api/notificationChannels';
 import type { ConnectionTestResult } from '../api/kafka';
 import type { NotificationChannel, NotificationChannelType } from '../types';
+import { usePermissions } from '../context/AuthContext';
 import { Server, Database, CheckCircle, XCircle, Loader2, Plug, Save, Plus, Trash2, Edit2, Send, X, ChevronDown } from 'lucide-react';
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
+  const { canAdminister } = usePermissions();
 
   const { data: kafkaConfig, isLoading: loadingConfig } = useQuery({
     queryKey: ['kafkaConfig'],
@@ -73,8 +75,16 @@ export function SettingsPage() {
           <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-4 mb-6">
             <h3 className="font-semibold text-orange-800 dark:text-orange-300">Welcome to DLQ Manager</h3>
             <p className="text-sm text-orange-700 dark:text-orange-400 mt-1">
-              To get started, enter your Kafka bootstrap servers below and test the connection.
+              {canAdminister
+                ? 'To get started, enter your Kafka bootstrap servers below and test the connection.'
+                : 'Kafka is not set up yet. Ask an admin to configure the connection.'}
             </p>
+          </div>
+        )}
+
+        {!canAdminister && (
+          <div className="mb-6 px-4 py-3 rounded-lg text-sm border bg-gray-50 border-gray-200 text-gray-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400">
+            View only - settings can be changed by admins.
           </div>
         )}
 
@@ -96,13 +106,15 @@ export function SettingsPage() {
                   setSaveSuccess(false);
                 }}
                 placeholder="localhost:9092"
-                className={inputClass}
+                readOnly={!canAdminister}
+                className={`${inputClass} read-only:opacity-70 read-only:cursor-default`}
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Comma-separated list of Kafka broker addresses (e.g., broker1:9092,broker2:9092)
               </p>
             </div>
 
+            {canAdminister && (
             <div className="flex gap-3">
               <button
                 onClick={() => {
@@ -134,6 +146,7 @@ export function SettingsPage() {
                 Save
               </button>
             </div>
+            )}
 
             {/* Test result feedback */}
             {testResult && (
@@ -258,6 +271,7 @@ const labelClass2 = 'block text-sm font-medium text-gray-700 dark:text-gray-300 
 const CHANNEL_ICONS: Record<string, string> = { SLACK: '💬' };
 
 function NotificationChannelsSection({ cardClass }: { cardClass: string }) {
+  const { canAdminister } = usePermissions();
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<NotificationChannel | null>(null);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; message?: string; error?: string }>>({});
@@ -286,12 +300,14 @@ function NotificationChannelsSection({ cardClass }: { cardClass: string }) {
     <div className={`${cardClass} p-6`}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Notification Channels</h3>
-        <button
-          onClick={() => { setEditing(null); setShowModal(true); }}
-          className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600"
-        >
-          <Plus className="w-4 h-4" /> Add Channel
-        </button>
+        {canAdminister && (
+          <button
+            onClick={() => { setEditing(null); setShowModal(true); }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600"
+          >
+            <Plus className="w-4 h-4" /> Add Channel
+          </button>
+        )}
       </div>
 
       {isLoading ? (
@@ -312,6 +328,7 @@ function NotificationChannelsSection({ cardClass }: { cardClass: string }) {
                   <p className="text-xs text-gray-500 dark:text-gray-400">{channel.type} {!channel.enabled && '· Disabled'}</p>
                 </div>
               </div>
+              {canAdminister && (
               <div className="flex items-center gap-2">
                 {testResults[channel.id] && (
                   <span className={`text-xs ${testResults[channel.id].success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
@@ -339,6 +356,7 @@ function NotificationChannelsSection({ cardClass }: { cardClass: string }) {
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
+              )}
             </div>
           ))}
         </div>

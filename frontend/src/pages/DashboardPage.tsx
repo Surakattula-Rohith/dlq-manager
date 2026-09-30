@@ -12,8 +12,10 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDate } from '../utils/date';
+import { usePermissions } from '../context/AuthContext';
 
 export function DashboardPage() {
+  const { canAdminister } = usePermissions();
   const { data: dlqTopics, isLoading: loadingTopics, refetch } = useQuery({
     queryKey: ['dlqTopics'],
     queryFn: dlqTopicsApi.getAll,
@@ -159,9 +161,11 @@ export function DashboardPage() {
             ) : (
               <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                 No DLQ topics registered yet.{' '}
-                <Link to="/dlq-topics" className="text-orange-600 hover:underline">
-                  Add one now
-                </Link>
+                {canAdminister && (
+                  <Link to="/dlq-topics" className="text-orange-600 hover:underline">
+                    Add one now
+                  </Link>
+                )}
               </div>
             )}
           </div>

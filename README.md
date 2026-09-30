@@ -33,6 +33,7 @@ This project started as a weekend experiment and has grown into a full platform 
 - **Track** every replay operation with a full audit trail
 - **Configure** Kafka connections from the UI — no restart needed
 - **Alert** when a DLQ crosses a threshold, with Slack notifications
+- **Share** with a team: sign-in with viewer, operator and admin roles
 
 ---
 
@@ -122,6 +123,14 @@ Backend variables: `SERVER_PORT`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAFKA
 ### Sign-in
 
 Every page and API call needs a signed-in user. Three demo accounts exist out of the box, with the password equal to the username: `admin`, `operator` and `viewer`.
+
+| Role | Can do |
+|------|--------|
+| Viewer | Browse, search and export messages; see replay history, alerts and settings |
+| Operator | Everything a viewer can, plus replay messages and acknowledge or snooze alerts |
+| Admin | Everything, including DLQ topics, alert rules, Slack channels and Kafka settings |
+
+Roles are enforced by the API (a forbidden call returns `403`); the UI also hides actions your role can't use.
 
 **Before sharing the app with a team**, change the passwords:
 
@@ -213,7 +222,7 @@ CI runs the full backend suite plus frontend lint and build on every push.
 | `POST` | `/api/auth/logout` | Sign out |
 | `GET` | `/api/auth/me` | Who is signed in |
 
-All other endpoints need a session (the web UI) or HTTP Basic credentials (scripts).
+All other endpoints need a session (the web UI) or HTTP Basic credentials (scripts). `GET` endpoints are open to every role; replay and alert acknowledge/snooze need `OPERATOR`; everything else needs `ADMIN`.
 
 ### DLQ Topics
 | Method | Endpoint | Description |

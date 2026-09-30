@@ -13,8 +13,11 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -42,6 +45,10 @@ import java.util.function.Supplier;
  * Security setup
  *
  * - Every /api endpoint needs a signed-in user, except /api/auth/** (login, logout, "who am I")
+ * - What a user may change depends on their role (see Role):
+ *     VIEWER   - read everything (browse, search, export, history, alerts, settings)
+ *     OPERATOR - also replay messages and acknowledge / snooze alerts
+ *     ADMIN    - also change DLQ topics, alert rules, Slack channels and Kafka settings
  * - The web UI signs in once (POST /api/auth/login) and then uses the session cookie
  * - Scripts can send a username and password with every request instead (HTTP Basic)
  * - Session cookies are protected against CSRF: the UI reads the XSRF-TOKEN cookie and sends it
@@ -64,7 +71,15 @@ public class SecurityConfig {
                         // error dispatch - both belong to a request that was already checked
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
-                        .anyRequest().authenticated())
+                        // Everyone who is signed in can look
+                        .requestMatchers(HttpMethod.GET, "/api/**").authenticated()
+                        // Operators handle incidents: replay messages and deal with fired alerts
+                        .requestMatchers(HttpMethod.POST, "/api/replay/single", "/api/replay/bulk").hasRole("OPERATOR")
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/alert-events/*/acknowledge", "/api/alert-events/*/snooze").hasRole("OPERATOR")
+                        // Every other change is for admins. New endpoints land here too,
+                        // so nothing becomes changeable by viewers or operators by accident.
+                        .anyRequest().hasRole("ADMIN"))
                 .formLogin(form -> form
                         .loginPage("/api/auth/login")
                         .loginProcessingUrl("/api/auth/login")
@@ -85,7 +100,14 @@ public class SecurityConfig {
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
-                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(unauthorized))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(unauthorized)
+                        .accessDeniedHandler((request, response, exception) -> {
+                            response.setStatus(HttpStatus.FORBIDDEN.value());
+                            writeJson(response, objectMapper, Map.of(
+                                    "success", false,
+                                    "error", "Your role is not allowed to do this"));
+                        }))
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
@@ -95,6 +117,17 @@ public class SecurityConfig {
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * ADMIN can do everything an OPERATOR can, and an OPERATOR everything a VIEWER can
+     */
+    @Bean
+    public RoleHierarchy roleHierarchy() {
+        return RoleHierarchyImpl.withDefaultRolePrefix()
+                .role(Role.ADMIN.name()).implies(Role.OPERATOR.name())
+                .role(Role.OPERATOR.name()).implies(Role.VIEWER.name())
+                .build();
     }
 
     @Bean
