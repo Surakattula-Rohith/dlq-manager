@@ -13,7 +13,6 @@ import com.dlqmanager.repository.DlqTopicRepository;
 import com.dlqmanager.repository.ReplayJobRepository;
 import com.dlqmanager.repository.ReplayMessageRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -70,7 +69,7 @@ public class ReplayService {
     private final ReplayJobRepository replayJobRepository;
     private final ReplayMessageRepository replayMessageRepository;
     private final ReplayProducer replayProducer;
-    private final KafkaConfigService kafkaConfigService;
+    private final KafkaConsumerPool consumerPool;
     private final ActivityLogService activityLogService;
     private final ReplayClaimService replayClaimService;
 
@@ -79,7 +78,7 @@ public class ReplayService {
             ReplayJobRepository replayJobRepository,
             ReplayMessageRepository replayMessageRepository,
             ReplayProducer replayProducer,
-            KafkaConfigService kafkaConfigService,
+            KafkaConsumerPool consumerPool,
             ActivityLogService activityLogService,
             ReplayClaimService replayClaimService
     ) {
@@ -87,7 +86,7 @@ public class ReplayService {
         this.replayJobRepository = replayJobRepository;
         this.replayMessageRepository = replayMessageRepository;
         this.replayProducer = replayProducer;
-        this.kafkaConfigService = kafkaConfigService;
+        this.consumerPool = consumerPool;
         this.activityLogService = activityLogService;
         this.replayClaimService = replayClaimService;
     }
@@ -158,7 +157,8 @@ public class ReplayService {
         replayJobRepository.save(replayJob);
         log.info("Created replay job with ID: {}", replayJob.getId());
 
-        try (KafkaConsumer<String, String> consumer = createConsumer()) {
+        try (KafkaConsumerPool.Lease lease = consumerPool.borrow()) {
+            KafkaConsumer<String, String> consumer = lease.consumer();
             // Step 4: Update status to RUNNING
             replayJob.setStatus(ReplayStatus.RUNNING);
             replayJob.setStartedAt(LocalDateTime.now());
@@ -306,7 +306,8 @@ public class ReplayService {
         Set<String> listed = new HashSet<>();
 
         // Step 4: Process each message
-        try (KafkaConsumer<String, String> consumer = createConsumer()) {
+        try (KafkaConsumerPool.Lease lease = consumerPool.borrow()) {
+            KafkaConsumer<String, String> consumer = lease.consumer();
             for (BulkReplayRequestDto.MessageIdentifier msgId : request.getMessages()) {
                 log.info("Processing message: offset={}, partition={}", msgId.getOffset(), msgId.getPartition());
 
@@ -509,25 +510,6 @@ public class ReplayService {
 
         // Message not found
         return null;
-    }
-
-    /**
-     * Create a Kafka consumer for reading DLQ messages
-     * Similar to DlqBrowserService but scoped to ReplayService
-     *
-     * @return configured KafkaConsumer
-     */
-    private KafkaConsumer<String, String> createConsumer() {
-        Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConfigService.getBootstrapServers());
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "dlq-manager-replay-" + UUID.randomUUID());
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
-        props.put(ConsumerConfig.ALLOW_AUTO_CREATE_TOPICS_CONFIG, "false");
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-
-        return new KafkaConsumer<>(props);
     }
 
     /**

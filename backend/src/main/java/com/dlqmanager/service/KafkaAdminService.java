@@ -1,5 +1,6 @@
 package com.dlqmanager.service;
 
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.AdminClient;
@@ -8,6 +9,7 @@ import org.apache.kafka.clients.admin.ListTopicsOptions;
 import org.apache.kafka.clients.admin.TopicListing;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -25,7 +27,12 @@ import java.util.stream.Collectors;
 @Slf4j
 public class KafkaAdminService {
 
+    private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(5);
+
     private final KafkaConfigService kafkaConfigService;
+
+    private AdminClient adminClient;
+    private String adminClientBootstrapServers;
 
     /**
      * List all Kafka topics in the cluster
@@ -36,7 +43,8 @@ public class KafkaAdminService {
     public List<String> listAllTopics() {
         log.debug("Fetching all Kafka topics...");
 
-        try (AdminClient adminClient = createAdminClient()) {
+        try {
+            AdminClient adminClient = adminClient();
             // List all topics (including internal topics)
             Collection<TopicListing> topicListings = adminClient.listTopics(
                 new ListTopicsOptions().listInternal(false)
@@ -65,7 +73,8 @@ public class KafkaAdminService {
     public boolean topicExists(String topicName) {
         log.debug("Checking if topic exists: {}", topicName);
 
-        try (AdminClient adminClient = createAdminClient()) {
+        try {
+            AdminClient adminClient = adminClient();
             Set<String> existingTopics = adminClient.listTopics().names().get();
             boolean exists = existingTopics.contains(topicName);
 
@@ -125,7 +134,8 @@ public class KafkaAdminService {
     public Map<String, Object> getClusterInfo() {
         log.debug("Fetching Kafka cluster information...");
 
-        try (AdminClient adminClient = createAdminClient()) {
+        try {
+            AdminClient adminClient = adminClient();
             Map<String, Object> clusterInfo = new HashMap<>();
 
             // Get cluster ID
@@ -149,9 +159,32 @@ public class KafkaAdminService {
         }
     }
 
-    private AdminClient createAdminClient() {
-        Map<String, Object> props = new HashMap<>();
-        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConfigService.getBootstrapServers());
-        return AdminClient.create(props);
+    /**
+     * One shared admin client (it is thread-safe), rebuilt only when the Kafka address
+     * changes in Settings. Creating one per call meant a new connection for every topic
+     * check and every refresh of the cluster info.
+     */
+    private synchronized AdminClient adminClient() {
+        String bootstrapServers = kafkaConfigService.getBootstrapServers();
+        if (adminClient == null || !bootstrapServers.equals(adminClientBootstrapServers)) {
+            if (adminClient != null) {
+                log.info("Kafka bootstrap servers changed from {} to {}, recreating admin client",
+                        adminClientBootstrapServers, bootstrapServers);
+                adminClient.close(CLOSE_TIMEOUT);
+            }
+            Map<String, Object> props = new HashMap<>();
+            props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+            adminClient = AdminClient.create(props);
+            adminClientBootstrapServers = bootstrapServers;
+        }
+        return adminClient;
+    }
+
+    @PreDestroy
+    public synchronized void close() {
+        if (adminClient != null) {
+            adminClient.close(CLOSE_TIMEOUT);
+            adminClient = null;
+        }
     }
 }

@@ -6,7 +6,6 @@ import com.dlqmanager.repository.DlqTopicRepository;
 import com.dlqmanager.repository.ReplayMessageRepository;
 import com.dlqmanager.util.DlqHeaders;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -26,7 +25,7 @@ import java.util.function.Consumer;
  * Purpose: Read messages from DLQ topics on-demand (not continuously)
  *
  * Key Responsibilities:
- * 1. Create Kafka Consumer for browsing
+ * 1. Borrow a Kafka consumer from the pool (see KafkaConsumerPool)
  * 2. Implement pagination across ALL partitions of the topic
  * 3. Read N messages from a DLQ topic
  * 4. Convert raw Kafka messages to DlqMessageDto
@@ -57,16 +56,16 @@ public class DlqBrowserService {
     private static final long MAX_SCAN_MESSAGES = 100_000;
 
     private final DlqTopicRepository dlqTopicRepository;
-    private final KafkaConfigService kafkaConfigService;
+    private final KafkaConsumerPool consumerPool;
     private final ReplayMessageRepository replayMessageRepository;
 
     public DlqBrowserService(
             DlqTopicRepository dlqTopicRepository,
-            KafkaConfigService kafkaConfigService,
+            KafkaConsumerPool consumerPool,
             ReplayMessageRepository replayMessageRepository
     ) {
         this.dlqTopicRepository = dlqTopicRepository;
-        this.kafkaConfigService = kafkaConfigService;
+        this.consumerPool = consumerPool;
         this.replayMessageRepository = replayMessageRepository;
     }
 
@@ -155,7 +154,8 @@ public class DlqBrowserService {
         long[] scanned = {0};
         long[] matched = {0};
 
-        try (KafkaConsumer<String, String> consumer = createConsumer()) {
+        try (KafkaConsumerPool.Lease lease = consumerPool.borrow()) {
+            KafkaConsumer<String, String> consumer = lease.consumer();
             List<TopicPartition> partitions = getPartitions(consumer, topicName);
             Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
             Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
@@ -230,7 +230,8 @@ public class DlqBrowserService {
         List<DlqMessageDto> messages = new ArrayList<>();
         long toSkip = (long) (page - 1) * size;
 
-        try (KafkaConsumer<String, String> consumer = createConsumer()) {
+        try (KafkaConsumerPool.Lease lease = consumerPool.borrow()) {
+            KafkaConsumer<String, String> consumer = lease.consumer();
             List<TopicPartition> partitions = getPartitions(consumer, topicName);
             if (partitions.isEmpty()) {
                 log.warn("Topic {} has no partitions (does it exist?)", topicName);
@@ -310,7 +311,8 @@ public class DlqBrowserService {
         DlqTopic dlqTopic = findDlqTopic(dlqTopicId);
         String topicName = dlqTopic.getDlqTopicName();
 
-        try (KafkaConsumer<String, String> consumer = createConsumer()) {
+        try (KafkaConsumerPool.Lease lease = consumerPool.borrow()) {
+            KafkaConsumer<String, String> consumer = lease.consumer();
             List<TopicPartition> partitions = getPartitions(consumer, topicName);
             if (partitions.isEmpty()) {
                 return new MessageCounts(0, 0, 0, 0);
@@ -384,7 +386,8 @@ public class DlqBrowserService {
         Map<String, Long> errorCounts = new HashMap<>();
         long[] totalMessagesRead = {0};
 
-        try (KafkaConsumer<String, String> consumer = createConsumer()) {
+        try (KafkaConsumerPool.Lease lease = consumerPool.borrow()) {
+            KafkaConsumer<String, String> consumer = lease.consumer();
             List<TopicPartition> partitions = getPartitions(consumer, topicName);
             if (partitions.isEmpty()) {
                 return errorCounts;
@@ -498,33 +501,5 @@ public class DlqBrowserService {
     private DlqTopic findDlqTopic(UUID dlqTopicId) {
         return dlqTopicRepository.findById(dlqTopicId)
                 .orElseThrow(() -> new IllegalArgumentException("DLQ topic not found: " + dlqTopicId));
-    }
-
-    /**
-     * Create a Kafka Consumer for browsing
-     *
-     * Key configurations:
-     * - bootstrap.servers: Where to connect (read from Settings every time)
-     * - group.id: Consumer group name (separate from real consumers!)
-     * - enable.auto.commit: false (we're just reading, not processing)
-     * - allow.auto.create.topics: false (looking at a topic must never create it)
-     * - auto.offset.reset: earliest (start from beginning if no offset)
-     * - key/value deserializers: Convert bytes back to Strings
-     *
-     * Why a unique group ID?
-     * - We don't want to interfere with actual message processing
-     * - Our browsing shouldn't affect consumer offsets of real apps
-     */
-    private KafkaConsumer<String, String> createConsumer() {
-        Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConfigService.getBootstrapServers());
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "dlq-manager-browser-" + UUID.randomUUID());
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");  // We're just browsing, don't commit offsets
-        props.put(ConsumerConfig.ALLOW_AUTO_CREATE_TOPICS_CONFIG, "false");
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");  // Start from beginning if no offset
-
-        return new KafkaConsumer<>(props);
     }
 }
