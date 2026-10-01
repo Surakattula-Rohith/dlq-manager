@@ -6,7 +6,8 @@ import {
   Bell,
   Settings,
   Database,
-  LogOut
+  LogOut,
+  ScrollText
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -14,6 +15,7 @@ const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/dlq-topics', icon: Inbox, label: 'DLQ Topics' },
   { to: '/replay-history', icon: History, label: 'Replay History' },
+  { to: '/activity', icon: ScrollText, label: 'Activity' },
   { to: '/alerts', icon: Bell, label: 'Alerts' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];

@@ -2,6 +2,7 @@ package com.dlqmanager.service;
 
 import com.dlqmanager.model.entity.AlertRule;
 import com.dlqmanager.model.entity.NotificationChannel;
+import com.dlqmanager.model.enums.ActivityAction;
 import com.dlqmanager.model.enums.NotificationChannelType;
 import com.dlqmanager.repository.AlertRuleRepository;
 import com.dlqmanager.repository.NotificationChannelRepository;
@@ -29,6 +30,7 @@ public class NotificationChannelService {
     private final NotificationService notificationService;
     private final AlertRuleRepository alertRuleRepository;
     private final ObjectMapper objectMapper;
+    private final ActivityLogService activityLogService;
 
     public List<NotificationChannel> getAll() {
         return notificationChannelRepository.findAll();
@@ -46,7 +48,9 @@ public class NotificationChannelService {
         channel.setType(type);
         channel.setConfiguration(configuration);
         channel.setEnabled(true);
-        return notificationChannelRepository.save(channel);
+        NotificationChannel saved = notificationChannelRepository.save(channel);
+        activityLogService.record(ActivityAction.CHANNEL_CREATED, saved.getName(), saved.getType().name());
+        return saved;
     }
 
     public NotificationChannel update(UUID id, String name, NotificationChannelType type,
@@ -67,11 +71,15 @@ public class NotificationChannelService {
         channel.setType(type);
         channel.setConfiguration(toJson(newConfig));
         channel.setEnabled(enabled);
-        return notificationChannelRepository.save(channel);
+        NotificationChannel saved = notificationChannelRepository.save(channel);
+        activityLogService.record(ActivityAction.CHANNEL_UPDATED, saved.getName(), enabled ? "enabled" : "disabled");
+        return saved;
     }
 
     @Transactional
     public void delete(UUID id) {
+        Optional<NotificationChannel> channel = notificationChannelRepository.findById(id);
+
         // Null out the FK on any alert rules referencing this channel before deleting
         List<AlertRule> rules = alertRuleRepository.findByNotificationChannelId(id);
         for (AlertRule rule : rules) {
@@ -79,6 +87,7 @@ public class NotificationChannelService {
         }
         alertRuleRepository.saveAll(rules);
         notificationChannelRepository.deleteById(id);
+        channel.ifPresent(deleted -> activityLogService.record(ActivityAction.CHANNEL_DELETED, deleted.getName(), null));
     }
 
     public Map<String, Object> testChannel(UUID id) {

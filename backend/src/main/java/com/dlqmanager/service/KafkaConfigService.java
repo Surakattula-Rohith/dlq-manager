@@ -1,6 +1,7 @@
 package com.dlqmanager.service;
 
 import com.dlqmanager.model.entity.KafkaConfig;
+import com.dlqmanager.model.enums.ActivityAction;
 import com.dlqmanager.repository.KafkaConfigRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.AdminClient;
@@ -18,13 +19,16 @@ import java.util.concurrent.TimeUnit;
 public class KafkaConfigService {
 
     private final KafkaConfigRepository kafkaConfigRepository;
+    private final ActivityLogService activityLogService;
     private final String defaultBootstrapServers;
 
     public KafkaConfigService(
             KafkaConfigRepository kafkaConfigRepository,
+            ActivityLogService activityLogService,
             @Value("${spring.kafka.bootstrap-servers}") String defaultBootstrapServers
     ) {
         this.kafkaConfigRepository = kafkaConfigRepository;
+        this.activityLogService = activityLogService;
         this.defaultBootstrapServers = defaultBootstrapServers;
     }
 
@@ -58,11 +62,15 @@ public class KafkaConfigService {
     public KafkaConfig saveConfig(String bootstrapServers) {
         log.info("Saving Kafka config: bootstrapServers={}", bootstrapServers);
 
+        String previous = getBootstrapServers();
         KafkaConfig config = kafkaConfigRepository.findFirstByOrderByIdAsc()
                 .orElse(new KafkaConfig());
 
         config.setBootstrapServers(bootstrapServers.trim());
-        return kafkaConfigRepository.save(config);
+        KafkaConfig saved = kafkaConfigRepository.save(config);
+        activityLogService.record(ActivityAction.KAFKA_SETTINGS_CHANGED, "Bootstrap servers",
+                previous + " -> " + saved.getBootstrapServers());
+        return saved;
     }
 
     /**

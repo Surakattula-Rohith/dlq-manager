@@ -171,3 +171,28 @@ export interface AuthSession {
   role?: Role;
   demoAccounts: boolean;
 }
+
+// Activity log
+export type ActivityAction =
+  | 'SIGNED_IN' | 'SIGNED_OUT' | 'SIGN_IN_FAILED'
+  | 'MESSAGES_REPLAYED'
+  | 'ALERT_ACKNOWLEDGED' | 'ALERT_SNOOZED'
+  | 'DLQ_TOPIC_ADDED' | 'DLQ_TOPIC_UPDATED' | 'DLQ_TOPIC_DELETED'
+  | 'ALERT_RULE_CREATED' | 'ALERT_RULE_UPDATED' | 'ALERT_RULE_ENABLED' | 'ALERT_RULE_DISABLED' | 'ALERT_RULE_DELETED'
+  | 'CHANNEL_CREATED' | 'CHANNEL_UPDATED' | 'CHANNEL_DELETED'
+  | 'KAFKA_SETTINGS_CHANGED';
+
+export interface ActivityEntry {
+  id: string;
+  occurredAt: string;
+  username: string;
+  action: ActivityAction;
+  target?: string;
+  details?: string;
+}
+
+export interface ActivityPage {
+  activity: ActivityEntry[];
+  pagination: { currentPage: number; pageSize: number; totalItems: number; totalPages: number };
+  usernames: string[];
+}

@@ -33,13 +33,16 @@ class NotificationChannelServiceTest {
     private NotificationService notificationService;
     @Mock
     private AlertRuleRepository alertRuleRepository;
+    @Mock
+    private ActivityLogService activityLogService;
 
     private NotificationChannelService service;
 
     @BeforeEach
     void setUp() {
         service = new NotificationChannelService(
-                notificationChannelRepository, notificationService, alertRuleRepository, new ObjectMapper());
+                notificationChannelRepository, notificationService, alertRuleRepository, new ObjectMapper(),
+                activityLogService);
     }
 
     @Test

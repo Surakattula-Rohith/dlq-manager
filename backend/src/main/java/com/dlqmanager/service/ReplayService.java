@@ -6,6 +6,7 @@ import com.dlqmanager.model.dto.ReplayRequestDto;
 import com.dlqmanager.model.entity.DlqTopic;
 import com.dlqmanager.model.entity.ReplayJob;
 import com.dlqmanager.model.entity.ReplayMessage;
+import com.dlqmanager.model.enums.ActivityAction;
 import com.dlqmanager.model.enums.ReplayMessageStatus;
 import com.dlqmanager.model.enums.ReplayStatus;
 import com.dlqmanager.repository.DlqTopicRepository;
@@ -69,19 +70,22 @@ public class ReplayService {
     private final ReplayMessageRepository replayMessageRepository;
     private final ReplayProducer replayProducer;
     private final KafkaConfigService kafkaConfigService;
+    private final ActivityLogService activityLogService;
 
     public ReplayService(
             DlqTopicRepository dlqTopicRepository,
             ReplayJobRepository replayJobRepository,
             ReplayMessageRepository replayMessageRepository,
             ReplayProducer replayProducer,
-            KafkaConfigService kafkaConfigService
+            KafkaConfigService kafkaConfigService,
+            ActivityLogService activityLogService
     ) {
         this.dlqTopicRepository = dlqTopicRepository;
         this.replayJobRepository = replayJobRepository;
         this.replayMessageRepository = replayMessageRepository;
         this.replayProducer = replayProducer;
         this.kafkaConfigService = kafkaConfigService;
+        this.activityLogService = activityLogService;
     }
 
     /**
@@ -191,6 +195,8 @@ public class ReplayService {
             );
 
             log.info("Replay job completed successfully: {}", replayJob.getId());
+            activityLogService.record(initiatedBy, ActivityAction.MESSAGES_REPLAYED, dlqTopic.getDlqTopicName(),
+                    describeSingle(request, "sent"));
 
         } catch (Exception e) {
             log.error("Replay failed for job: {}", replayJob.getId(), e);
@@ -210,6 +216,9 @@ public class ReplayService {
                     ReplayMessageStatus.FAILED,
                     e.getMessage()
             );
+
+            activityLogService.record(initiatedBy, ActivityAction.MESSAGES_REPLAYED, dlqTopic.getDlqTopicName(),
+                    describeSingle(request, "failed: " + e.getMessage()));
 
             throw new RuntimeException("Failed to replay message: " + e.getMessage(), e);
         }
@@ -376,9 +385,21 @@ public class ReplayService {
 
         log.info("Bulk replay completed. Job ID: {}, Succeeded: {}, Failed: {}",
                 replayJob.getId(), successCount, failureCount);
+        activityLogService.record(initiatedBy, ActivityAction.MESSAGES_REPLAYED, dlqTopic.getDlqTopicName(),
+                String.format("%d message(s): %d succeeded, %d failed%s",
+                        request.getMessages().size(), successCount, failureCount, force ? " (forced)" : ""));
 
         // Step 6: Convert to DTO and return
         return ReplayJobDto.fromEntity(replayJob);
+    }
+
+    /**
+     * Activity log text for a single replay, e.g. "partition 0, offset 42: sent"
+     */
+    private static String describeSingle(ReplayRequestDto request, String outcome) {
+        String forced = Boolean.TRUE.equals(request.getForce()) ? " (forced)" : "";
+        return "partition " + request.getMessagePartition() + ", offset " + request.getMessageOffset()
+                + forced + ": " + outcome;
     }
 
     /**

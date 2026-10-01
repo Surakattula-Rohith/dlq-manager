@@ -5,3 +5,4 @@ export { kafkaApi } from './kafka';
 export { alertsApi } from './alerts';
 export { notificationChannelsApi } from './notificationChannels';
 export { authApi } from './auth';
+export { activityApi } from './activity';

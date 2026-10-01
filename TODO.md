@@ -34,7 +34,7 @@
 - [x] Sign-in for the UI and API (session cookie for the browser, HTTP Basic for scripts, CSRF protection)
 - [x] Role-based access control (Viewer, Operator, Admin) enforced by the API
 - [ ] Single sign-on with the company identity provider (OpenID Connect)
-- [ ] Audit log with the real user for every action
+- [x] Audit log with the real user for every action (Activity page)
 
 ---
 

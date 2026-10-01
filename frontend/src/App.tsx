@@ -10,6 +10,7 @@ import {
   ReplayHistoryPage,
   AlertsPage,
   SettingsPage,
+  ActivityPage,
 } from './pages';
 import { ThemeContext } from './context/ThemeContext';
 import { AUTH_SESSION_KEY } from './context/AuthContext';
@@ -52,6 +53,7 @@ function App() {
               <Route path="dlq-topics" element={<DlqTopicsPage />} />
               <Route path="dlq-topics/:id" element={<DlqTopicDetailPage />} />
               <Route path="replay-history" element={<ReplayHistoryPage />} />
+              <Route path="activity" element={<ActivityPage />} />
               <Route path="alerts" element={<AlertsPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>

@@ -1,7 +1,9 @@
 package com.dlqmanager.config;
 
 import com.dlqmanager.controller.AuthController;
+import com.dlqmanager.model.enums.ActivityAction;
 import com.dlqmanager.model.enums.Role;
+import com.dlqmanager.service.ActivityLogService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterChain;
@@ -62,7 +64,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper,
-                                                   AuthProperties authProperties) throws Exception {
+                                                   AuthProperties authProperties,
+                                                   ActivityLogService activityLogService) throws Exception {
         HttpStatusEntryPoint unauthorized = new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED);
 
         http
@@ -89,16 +92,24 @@ public class SecurityConfig {
                             if (csrfToken != null) {
                                 csrfToken.getToken();
                             }
+                            activityLogService.record(authentication.getName(), ActivityAction.SIGNED_IN, null, null);
                             writeJson(response, objectMapper,
                                     AuthController.sessionInfo(authentication, authProperties.demoAccountsInUse()));
                         })
                         .failureHandler((request, response, exception) -> {
+                            activityLogService.record(request.getParameter("username"),
+                                    ActivityAction.SIGN_IN_FAILED, null, null);
                             response.setStatus(HttpStatus.UNAUTHORIZED.value());
                             writeJson(response, objectMapper, Map.of("error", "Wrong username or password"));
                         }))
                 .httpBasic(basic -> basic.authenticationEntryPoint(unauthorized))
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
+                        .addLogoutHandler((request, response, authentication) -> {
+                            if (authentication != null) {
+                                activityLogService.record(authentication.getName(), ActivityAction.SIGNED_OUT, null, null);
+                            }
+                        })
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(unauthorized)

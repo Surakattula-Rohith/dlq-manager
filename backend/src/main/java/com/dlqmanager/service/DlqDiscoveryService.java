@@ -5,6 +5,7 @@ import com.dlqmanager.model.dto.UpdateDlqRequest;
 import com.dlqmanager.model.entity.DlqTopic;
 import com.dlqmanager.model.entity.AlertRule;
 import com.dlqmanager.model.entity.ReplayJob;
+import com.dlqmanager.model.enums.ActivityAction;
 import com.dlqmanager.model.enums.DlqStatus;
 import com.dlqmanager.repository.AlertEventRepository;
 import com.dlqmanager.repository.AlertRuleRepository;
@@ -37,6 +38,7 @@ public class DlqDiscoveryService {
     private final ReplayJobRepository replayJobRepository;
     private final ReplayMessageRepository replayMessageRepository;
     private final DlqCountSampleRepository dlqCountSampleRepository;
+    private final ActivityLogService activityLogService;
 
     /**
      * Register a new DLQ topic
@@ -78,6 +80,7 @@ public class DlqDiscoveryService {
 
         DlqTopic saved = dlqTopicRepository.save(dlqTopic);
         log.info("Successfully registered DLQ: {} (ID: {})", saved.getDlqTopicName(), saved.getId());
+        activityLogService.record(ActivityAction.DLQ_TOPIC_ADDED, saved.getDlqTopicName(), describe(saved));
 
         return saved;
     }
@@ -144,6 +147,7 @@ public class DlqDiscoveryService {
 
         DlqTopic updated = dlqTopicRepository.save(dlqTopic);
         log.info("Successfully updated DLQ topic: {}", id);
+        activityLogService.record(ActivityAction.DLQ_TOPIC_UPDATED, updated.getDlqTopicName(), describe(updated));
 
         return updated;
     }
@@ -180,6 +184,18 @@ public class DlqDiscoveryService {
         dlqTopicRepository.delete(dlqTopic);
 
         log.info("Successfully deleted DLQ topic: {} ({})", dlqTopic.getDlqTopicName(), id);
+        activityLogService.record(ActivityAction.DLQ_TOPIC_DELETED, dlqTopic.getDlqTopicName(), null);
+    }
+
+    /**
+     * Short description of a DLQ topic for the activity log
+     */
+    private static String describe(DlqTopic dlqTopic) {
+        String description = "source: " + dlqTopic.getSourceTopic() + ", status: " + dlqTopic.getStatus();
+        if (dlqTopic.getErrorFieldPath() != null && !dlqTopic.getErrorFieldPath().isBlank()) {
+            description += ", error field: " + dlqTopic.getErrorFieldPath();
+        }
+        return description;
     }
 
     /**
