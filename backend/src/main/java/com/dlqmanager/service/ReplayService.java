@@ -39,7 +39,8 @@ import java.util.*;
  *
  * Flow for single message replay:
  * 1. Look up DLQ topic in database
- * 2. Check the message wasn't already replayed (unless force=true)
+ * 2. Claim the message (only one replay can hold it at a time), then check it
+ *    wasn't already replayed (unless force=true)
  * 3. Create ReplayJob record (status: PENDING)
  * 4. Read message from DLQ using Kafka consumer
  * 5. Send message to source topic using ReplayProducer
@@ -71,6 +72,7 @@ public class ReplayService {
     private final ReplayProducer replayProducer;
     private final KafkaConfigService kafkaConfigService;
     private final ActivityLogService activityLogService;
+    private final ReplayClaimService replayClaimService;
 
     public ReplayService(
             DlqTopicRepository dlqTopicRepository,
@@ -78,7 +80,8 @@ public class ReplayService {
             ReplayMessageRepository replayMessageRepository,
             ReplayProducer replayProducer,
             KafkaConfigService kafkaConfigService,
-            ActivityLogService activityLogService
+            ActivityLogService activityLogService,
+            ReplayClaimService replayClaimService
     ) {
         this.dlqTopicRepository = dlqTopicRepository;
         this.replayJobRepository = replayJobRepository;
@@ -86,6 +89,7 @@ public class ReplayService {
         this.replayProducer = replayProducer;
         this.kafkaConfigService = kafkaConfigService;
         this.activityLogService = activityLogService;
+        this.replayClaimService = replayClaimService;
     }
 
     /**
@@ -114,17 +118,34 @@ public class ReplayService {
 
         log.info("Found DLQ topic: {} → source topic: {}", dlqTopic.getDlqTopicName(), dlqTopic.getSourceTopic());
 
-        // Step 2: Don't send the same message twice unless the caller explicitly asks for it
+        String initiatedBy = request.getInitiatedBy() != null ? request.getInitiatedBy() : "system";
+        int partition = request.getMessagePartition();
+        long offset = request.getMessageOffset();
+
+        // Step 2: Claim the message, so nobody else can replay it at the same moment
+        UUID claimId = replayClaimService.tryClaim(dlqTopic.getId(), partition, offset, initiatedBy)
+                .orElseThrow(() -> new IllegalStateException(beingReplayedMessage(partition, offset)));
+        try {
+            return replayClaimedMessage(request, dlqTopic, initiatedBy);
+        } finally {
+            replayClaimService.release(claimId);
+        }
+    }
+
+    /**
+     * The rest of a single replay. Only runs while holding the claim on the message,
+     * so the "already replayed?" check can't race with another replay of it.
+     */
+    private ReplayJobDto replayClaimedMessage(ReplayRequestDto request, DlqTopic dlqTopic, String initiatedBy) {
+        // Don't send the same message twice unless the caller explicitly asks for it
         if (!Boolean.TRUE.equals(request.getForce())) {
-            Map<String, LocalDateTime> replayedOffsets = replayMessageRepository.findReplayedOffsets(dlqTopic.getId());
-            String key = ReplayMessageRepository.offsetKey(request.getMessagePartition(), request.getMessageOffset());
-            if (replayedOffsets.containsKey(key)) {
+            List<ReplayMessage> previous = replayMessageRepository.findReplaysOfMessage(
+                    dlqTopic.getId(), request.getMessagePartition(), request.getMessageOffset(), ReplayMessageStatus.SUCCESS);
+            if (!previous.isEmpty()) {
                 throw new IllegalStateException(alreadyReplayedMessage(
-                        request.getMessagePartition(), request.getMessageOffset(), replayedOffsets.get(key)));
+                        request.getMessagePartition(), request.getMessageOffset(), previous.get(0).getReplayedAt()));
             }
         }
-
-        String initiatedBy = request.getInitiatedBy() != null ? request.getInitiatedBy() : "system";
 
         // Step 3: Create ReplayJob record
         ReplayJob replayJob = new ReplayJob();
@@ -234,7 +255,8 @@ public class ReplayService {
      * 1. Validate: DLQ topic exists
      * 2. Create: ReplayJob for N messages
      * 3. Loop: For each message (one Kafka consumer is reused for all of them)
-     *    a. Skip if already replayed (unless force=true) - recorded as FAILED with the reason
+     *    a. Claim it - skip if someone else is replaying it right now, or if it was
+     *       already replayed (unless force=true); skipped messages are recorded as FAILED with the reason
      *    b. Read from DLQ
      *    c. Send to source topic
      *    d. Record success/failure
@@ -262,7 +284,6 @@ public class ReplayService {
 
         String initiatedBy = request.getInitiatedBy() != null ? request.getInitiatedBy() : "system";
         boolean force = Boolean.TRUE.equals(request.getForce());
-        Map<String, LocalDateTime> replayedOffsets = replayMessageRepository.findReplayedOffsets(dlqTopic.getId());
 
         // Step 2: Create ReplayJob record
         ReplayJob replayJob = new ReplayJob();
@@ -282,96 +303,41 @@ public class ReplayService {
 
         int successCount = 0;
         int failureCount = 0;
+        Set<String> listed = new HashSet<>();
 
         // Step 4: Process each message
         try (KafkaConsumer<String, String> consumer = createConsumer()) {
             for (BulkReplayRequestDto.MessageIdentifier msgId : request.getMessages()) {
                 log.info("Processing message: offset={}, partition={}", msgId.getOffset(), msgId.getPartition());
 
-                String key = ReplayMessageRepository.offsetKey(msgId.getPartition(), msgId.getOffset());
-
-                // Already replayed? Record why it was skipped instead of sending a duplicate
-                if (!force && replayedOffsets.containsKey(key)) {
-                    log.warn("Skipping already replayed message: offset={}, partition={}", msgId.getOffset(), msgId.getPartition());
+                // Same message listed twice in one request? Only send it once.
+                if (!listed.add(ReplayMessageRepository.offsetKey(msgId.getPartition(), msgId.getOffset()))) {
                     failureCount++;
-                    createReplayMessageRecord(
-                            replayJob,
-                            null,
-                            msgId.getOffset(),
-                            msgId.getPartition(),
-                            ReplayMessageStatus.FAILED,
-                            alreadyReplayedMessage(msgId.getPartition(), msgId.getOffset(), replayedOffsets.get(key))
-                    );
+                    createReplayMessageRecord(replayJob, null, msgId.getOffset(), msgId.getPartition(),
+                            ReplayMessageStatus.FAILED, "Listed more than once in this replay");
+                    continue;
+                }
+
+                // Someone else replaying this message right now? Skip it rather than send it twice.
+                Optional<UUID> claimId = replayClaimService.tryClaim(
+                        dlqTopic.getId(), msgId.getPartition(), msgId.getOffset(), initiatedBy);
+                if (claimId.isEmpty()) {
+                    log.warn("Skipping message being replayed elsewhere: offset={}, partition={}",
+                            msgId.getOffset(), msgId.getPartition());
+                    failureCount++;
+                    createReplayMessageRecord(replayJob, null, msgId.getOffset(), msgId.getPartition(),
+                            ReplayMessageStatus.FAILED, beingReplayedMessage(msgId.getPartition(), msgId.getOffset()));
                     continue;
                 }
 
                 try {
-                    // Read message from DLQ
-                    ConsumerRecord<String, String> record = readMessageFromDlq(
-                            consumer,
-                            dlqTopic.getDlqTopicName(),
-                            msgId.getPartition(),
-                            msgId.getOffset()
-                    );
-
-                    if (record == null) {
-                        log.warn("Message not found at offset: {}, partition: {}", msgId.getOffset(), msgId.getPartition());
+                    if (replayClaimedBulkMessage(consumer, replayJob, dlqTopic, msgId, force, initiatedBy)) {
+                        successCount++;
+                    } else {
                         failureCount++;
-
-                        // Record failure
-                        createReplayMessageRecord(
-                                replayJob,
-                                null,
-                                msgId.getOffset(),
-                                msgId.getPartition(),
-                                ReplayMessageStatus.FAILED,
-                                "Message not found at offset: " + msgId.getOffset()
-                        );
-                        continue;
                     }
-
-                    // Send message to source topic
-                    List<Header> headers = new ArrayList<>();
-                    record.headers().forEach(headers::add);
-
-                    RecordMetadata metadata = replayProducer.sendMessage(
-                            dlqTopic.getSourceTopic(),
-                            record.key(),
-                            record.value(),
-                            headers,
-                            initiatedBy
-                    );
-
-                    log.info("Message replayed successfully. Key: {}, Offset: {}", record.key(), metadata.offset());
-                    successCount++;
-
-                    // Record success
-                    createReplayMessageRecord(
-                            replayJob,
-                            record.key(),
-                            record.offset(),
-                            record.partition(),
-                            ReplayMessageStatus.SUCCESS,
-                            null
-                    );
-
-                    // Same message listed twice in one request? Only send it once.
-                    replayedOffsets.put(key, LocalDateTime.now());
-
-                } catch (Exception e) {
-                    log.error("Failed to replay message at offset: {}, partition: {}",
-                            msgId.getOffset(), msgId.getPartition(), e);
-                    failureCount++;
-
-                    // Record failure
-                    createReplayMessageRecord(
-                            replayJob,
-                            null,
-                            msgId.getOffset(),
-                            msgId.getPartition(),
-                            ReplayMessageStatus.FAILED,
-                            e.getMessage()
-                    );
+                } finally {
+                    replayClaimService.release(claimId.get());
                 }
             }
         }
@@ -391,6 +357,69 @@ public class ReplayService {
 
         // Step 6: Convert to DTO and return
         return ReplayJobDto.fromEntity(replayJob);
+    }
+
+    /**
+     * Replay one message of a bulk replay and record the result.
+     * Only runs while holding the claim on the message.
+     *
+     * @return true if the message was sent to the source topic
+     */
+    private boolean replayClaimedBulkMessage(KafkaConsumer<String, String> consumer, ReplayJob replayJob,
+                                             DlqTopic dlqTopic, BulkReplayRequestDto.MessageIdentifier msgId,
+                                             boolean force, String initiatedBy) {
+        // Already replayed? Record why it was skipped instead of sending a duplicate
+        if (!force) {
+            List<ReplayMessage> previous = replayMessageRepository.findReplaysOfMessage(
+                    dlqTopic.getId(), msgId.getPartition(), msgId.getOffset(), ReplayMessageStatus.SUCCESS);
+            if (!previous.isEmpty()) {
+                log.warn("Skipping already replayed message: offset={}, partition={}", msgId.getOffset(), msgId.getPartition());
+                createReplayMessageRecord(replayJob, null, msgId.getOffset(), msgId.getPartition(),
+                        ReplayMessageStatus.FAILED,
+                        alreadyReplayedMessage(msgId.getPartition(), msgId.getOffset(), previous.get(0).getReplayedAt()));
+                return false;
+            }
+        }
+
+        try {
+            // Read message from DLQ
+            ConsumerRecord<String, String> record = readMessageFromDlq(
+                    consumer,
+                    dlqTopic.getDlqTopicName(),
+                    msgId.getPartition(),
+                    msgId.getOffset()
+            );
+
+            if (record == null) {
+                log.warn("Message not found at offset: {}, partition: {}", msgId.getOffset(), msgId.getPartition());
+                createReplayMessageRecord(replayJob, null, msgId.getOffset(), msgId.getPartition(),
+                        ReplayMessageStatus.FAILED, "Message not found at offset: " + msgId.getOffset());
+                return false;
+            }
+
+            // Send message to source topic
+            List<Header> headers = new ArrayList<>();
+            record.headers().forEach(headers::add);
+
+            RecordMetadata metadata = replayProducer.sendMessage(
+                    dlqTopic.getSourceTopic(),
+                    record.key(),
+                    record.value(),
+                    headers,
+                    initiatedBy
+            );
+
+            log.info("Message replayed successfully. Key: {}, Offset: {}", record.key(), metadata.offset());
+            createReplayMessageRecord(replayJob, record.key(), record.offset(), record.partition(),
+                    ReplayMessageStatus.SUCCESS, null);
+            return true;
+
+        } catch (Exception e) {
+            log.error("Failed to replay message at offset: {}, partition: {}", msgId.getOffset(), msgId.getPartition(), e);
+            createReplayMessageRecord(replayJob, null, msgId.getOffset(), msgId.getPartition(),
+                    ReplayMessageStatus.FAILED, e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -430,6 +459,11 @@ public class ReplayService {
         replayMessage.setErrorMessage(errorMessage);
         replayMessage.setReplayedAt(LocalDateTime.now());
         replayMessageRepository.save(replayMessage);
+    }
+
+    private static String beingReplayedMessage(Integer partition, Long offset) {
+        return String.format("Message at partition %d, offset %d is being replayed by someone else right now. "
+                + "Check Replay History in a moment.", partition, offset);
     }
 
     private String alreadyReplayedMessage(Integer partition, Long offset, LocalDateTime replayedAt) {

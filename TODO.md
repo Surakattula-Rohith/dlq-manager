@@ -35,6 +35,7 @@
 - [x] Role-based access control (Viewer, Operator, Admin) enforced by the API
 - [ ] Single sign-on with the company identity provider (OpenID Connect)
 - [x] Audit log with the real user for every action (Activity page)
+- [x] Safe concurrent replays: a message being replayed by one person can't be sent again by another at the same time
 
 ---
 

@@ -67,6 +67,18 @@ public interface ReplayMessageRepository extends JpaRepository<ReplayMessage, UU
                                                @Param("status") ReplayMessageStatus status);
 
     /**
+     * Replay results for one DLQ message, newest first
+     * Used right before sending, so it also sees a replay that finished a moment ago
+     */
+    @Query("SELECT rm FROM ReplayMessage rm WHERE rm.replayJob.dlqTopic.id = :dlqTopicId "
+            + "AND rm.dlqPartition = :partition AND rm.dlqOffset = :offset AND rm.status = :status "
+            + "ORDER BY rm.replayedAt DESC")
+    List<ReplayMessage> findReplaysOfMessage(@Param("dlqTopicId") UUID dlqTopicId,
+                                             @Param("partition") Integer partition,
+                                             @Param("offset") Long offset,
+                                             @Param("status") ReplayMessageStatus status);
+
+    /**
      * Find all failed messages for a job (convenience method)
      * Same as: findByReplayJobIdAndStatus(jobId, ReplayMessageStatus.FAILED)
      *

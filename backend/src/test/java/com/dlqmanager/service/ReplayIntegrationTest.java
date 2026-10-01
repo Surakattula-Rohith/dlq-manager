@@ -25,6 +25,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -125,7 +131,72 @@ class ReplayIntegrationTest extends IntegrationTestBase {
         assertThat(replayJobRepository.findByDlqTopicIdAndStatus(id, ReplayStatus.FAILED)).hasSize(1);
     }
 
+    @Test
+    void simultaneousReplaysOfTheSameMessageSendItOnce() throws Exception {
+        String source = uniqueTopic("orders");
+        String dlq = source + "-dlq";
+        createTopic(source, 1);
+        createTopic(dlq, 1);
+        produce(dlq, 0, 1, Map.of());
+        UUID id = register(dlq, source);
+
+        // Six people press Replay on the same message at the same moment
+        List<Boolean> sent = runTogether(6, () -> {
+            try {
+                replayService.replayMessage(single(id, 0L, false));
+                return true;
+            } catch (IllegalStateException e) {
+                return false; // "already replayed" or "being replayed by someone else"
+            }
+        });
+
+        assertThat(sent).containsOnlyOnce(true);
+        assertThat(readAll(source, 1)).hasSize(1);
+    }
+
+    @Test
+    void overlappingBulkReplaysSendEachMessageOnce() throws Exception {
+        String source = uniqueTopic("orders");
+        String dlq = source + "-dlq";
+        createTopic(source, 1);
+        createTopic(dlq, 1);
+        produce(dlq, 0, 3, Map.of());
+        UUID id = register(dlq, source);
+
+        List<Integer> succeeded = runTogether(3,
+                () -> replayService.bulkReplayMessages(bulk(id, false, 0L, 1L, 2L)).getSucceeded());
+
+        assertThat(succeeded.stream().mapToInt(Integer::intValue).sum()).isEqualTo(3);
+        assertThat(readAll(source, 3)).hasSize(3);
+    }
+
     // --- Helpers ---
+
+    /**
+     * Run the same task on several threads, all starting at the same moment
+     */
+    private static <T> List<T> runTogether(int threads, Callable<T> task) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<T>> futures = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    return task.call();
+                }));
+            }
+            start.countDown();
+
+            List<T> results = new ArrayList<>();
+            for (Future<T> future : futures) {
+                results.add(future.get(60, TimeUnit.SECONDS));
+            }
+            return results;
+        } finally {
+            pool.shutdownNow();
+        }
+    }
 
     private UUID register(String dlqTopicName, String sourceTopic) {
         DlqTopic topic = new DlqTopic();
