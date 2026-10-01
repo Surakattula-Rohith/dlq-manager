@@ -38,9 +38,17 @@ public class AlertEvent {
     @Column(name = "acknowledged_at")
     private LocalDateTime acknowledgedAt;
 
+    // Username of whoever acknowledged the alert
+    @Column(name = "acknowledged_by")
+    private String acknowledgedBy;
+
     /** When a snoozed alert should resume firing. */
     @Column(name = "snoozed_until")
     private LocalDateTime snoozedUntil;
+
+    // Username of whoever snoozed the alert (kept after the snooze ends)
+    @Column(name = "snoozed_by")
+    private String snoozedBy;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

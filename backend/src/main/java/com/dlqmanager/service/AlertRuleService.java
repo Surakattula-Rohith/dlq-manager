@@ -99,19 +99,21 @@ public class AlertRuleService {
         alertRuleRepository.deleteById(id);
     }
 
-    public AlertEvent acknowledgeEvent(UUID eventId) {
+    public AlertEvent acknowledgeEvent(UUID eventId, String username) {
         AlertEvent event = alertEventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Alert event not found: " + eventId));
         event.setStatus(AlertStatus.ACKNOWLEDGED);
         event.setAcknowledgedAt(LocalDateTime.now());
+        event.setAcknowledgedBy(username);
         return alertEventRepository.save(event);
     }
 
-    public AlertEvent snoozeEvent(UUID eventId, int snoozeMinutes) {
+    public AlertEvent snoozeEvent(UUID eventId, int snoozeMinutes, String username) {
         AlertEvent event = alertEventRepository.findById(eventId)
                 .orElseThrow(() -> new RuntimeException("Alert event not found: " + eventId));
         event.setStatus(AlertStatus.SNOOZED);
         event.setSnoozedUntil(LocalDateTime.now().plusMinutes(snoozeMinutes));
+        event.setSnoozedBy(username);
         return alertEventRepository.save(event);
     }
 

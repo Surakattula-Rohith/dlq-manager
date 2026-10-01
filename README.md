@@ -130,7 +130,7 @@ Every page and API call needs a signed-in user. Three demo accounts exist out of
 | Operator | Everything a viewer can, plus replay messages and acknowledge or snooze alerts |
 | Admin | Everything, including DLQ topics, alert rules, Slack channels and Kafka settings |
 
-Roles are enforced by the API (a forbidden call returns `403`); the UI also hides actions your role can't use.
+Roles are enforced by the API (a forbidden call returns `403`); the UI also hides actions your role can't use. Replays, acknowledged alerts and snoozed alerts are recorded under the signed-in user, and replayed messages carry it in the `X-Replayed-By` header.
 
 **Before sharing the app with a team**, change the passwords:
 

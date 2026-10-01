@@ -24,8 +24,7 @@ import java.util.UUID;
  *     {"offset": 51, "partition": 0},
  *     {"offset": 52, "partition": 0},
  *     {"offset": 53, "partition": 0}
- *   ],
- *   "initiatedBy": "user@example.com"
+ *   ]
  * }
  */
 @Data
@@ -48,7 +47,8 @@ public class BulkReplayRequestDto {
     private List<MessageIdentifier> messages;
 
     /**
-     * Optional: Who is initiating this bulk replay
+     * Who is initiating this bulk replay.
+     * Set by the controller to the signed-in user; a value sent by the client is ignored.
      */
     private String initiatedBy;
 

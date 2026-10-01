@@ -77,17 +77,16 @@ export interface ReplayJob {
   createdAt: string;
 }
 
+// Replays are recorded under the signed-in user (set by the server)
 export interface ReplayRequest {
   dlqTopicId: string;
   offset: number;
   partition: number;
-  initiatedBy: string;
 }
 
 export interface BulkReplayRequest {
   dlqTopicId: string;
   messages: { offset: number; partition: number }[];
-  initiatedBy: string;
   force?: boolean;
 }
 
@@ -133,7 +132,9 @@ export interface AlertEvent {
   messageCount: number;
   triggeredAt: string;
   acknowledgedAt?: string;
+  acknowledgedBy?: string;
   snoozedUntil?: string;
+  snoozedBy?: string;
 }
 
 // Dashboard types

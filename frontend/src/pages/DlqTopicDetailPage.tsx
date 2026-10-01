@@ -147,7 +147,6 @@ export function DlqTopicDetailPage() {
       await replayMutation.mutateAsync({
         dlqTopicId: id,
         messages,
-        initiatedBy: 'web-user',
       });
     } catch {
       // Error is shown by the mutation's onError handler
@@ -165,7 +164,6 @@ export function DlqTopicDetailPage() {
       await replayMutation.mutateAsync({
         dlqTopicId: id!,
         messages: [{ partition: message.partition, offset: message.offset }],
-        initiatedBy: 'web-user',
         force: message.replayed === true,
       });
       setExpandedMessage(null);

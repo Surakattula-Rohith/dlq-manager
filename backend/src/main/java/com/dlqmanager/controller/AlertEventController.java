@@ -5,6 +5,7 @@ import com.dlqmanager.service.AlertRuleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -32,9 +33,9 @@ public class AlertEventController {
     }
 
     @PostMapping("/{id}/acknowledge")
-    public ResponseEntity<Map<String, Object>> acknowledge(@PathVariable UUID id) {
+    public ResponseEntity<Map<String, Object>> acknowledge(@PathVariable UUID id, Authentication authentication) {
         try {
-            AlertEvent event = alertRuleService.acknowledgeEvent(id);
+            AlertEvent event = alertRuleService.acknowledgeEvent(id, authentication.getName());
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("alertEvent", toMap(event));
@@ -49,11 +50,12 @@ public class AlertEventController {
 
     @PostMapping("/{id}/snooze")
     public ResponseEntity<Map<String, Object>> snooze(@PathVariable UUID id,
-                                                       @RequestBody Map<String, Object> body) {
+                                                       @RequestBody Map<String, Object> body,
+                                                       Authentication authentication) {
         try {
             int minutes = body.get("minutes") != null
                     ? Integer.parseInt(body.get("minutes").toString()) : 60;
-            AlertEvent event = alertRuleService.snoozeEvent(id, minutes);
+            AlertEvent event = alertRuleService.snoozeEvent(id, minutes, authentication.getName());
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("alertEvent", toMap(event));
@@ -76,7 +78,9 @@ public class AlertEventController {
         m.put("messageCount", event.getMessageCount());
         m.put("triggeredAt", event.getTriggeredAt() != null ? event.getTriggeredAt().toString() : null);
         m.put("acknowledgedAt", event.getAcknowledgedAt() != null ? event.getAcknowledgedAt().toString() : null);
+        m.put("acknowledgedBy", event.getAcknowledgedBy());
         m.put("snoozedUntil", event.getSnoozedUntil() != null ? event.getSnoozedUntil().toString() : null);
+        m.put("snoozedBy", event.getSnoozedBy());
         return m;
     }
 }

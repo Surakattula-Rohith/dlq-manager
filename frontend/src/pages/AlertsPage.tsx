@@ -254,6 +254,12 @@ export function AlertsPage() {
                         <td className="px-4 py-3 text-gray-600 dark:text-gray-400 font-mono text-xs">{event.dlqTopicName}</td>
                         <td className="px-4 py-3">
                           <EventStatusBadge status={event.status} snoozedUntil={event.snoozedUntil} />
+                          {event.status === 'ACKNOWLEDGED' && event.acknowledgedBy && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">by {event.acknowledgedBy}</p>
+                          )}
+                          {event.status === 'SNOOZED' && event.snoozedBy && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">by {event.snoozedBy}</p>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-gray-900 dark:text-white font-medium">{event.messageCount}</td>
                         <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">

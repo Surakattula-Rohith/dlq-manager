@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -42,8 +43,7 @@ public class ReplayController {
      * {
      *   "dlqTopicId": "abc-123-uuid",
      *   "messageOffset": 42,
-     *   "messagePartition": 0,
-     *   "initiatedBy": "admin@example.com"
+     *   "messagePartition": 0
      * }
      *
      * Response:
@@ -58,7 +58,10 @@ public class ReplayController {
      */
     @PostMapping("/single")
     public ResponseEntity<Map<String, Object>> replaySingleMessage(
-            @Valid @RequestBody ReplayRequestDto request) {
+            @Valid @RequestBody ReplayRequestDto request, Authentication authentication) {
+
+        // The replay is recorded under the signed-in user, whatever the request body says
+        request.setInitiatedBy(authentication.getName());
 
         log.info("API: POST /api/replay/single - DLQ: {}, offset: {}, partition: {}",
                 request.getDlqTopicId(), request.getMessageOffset(), request.getMessagePartition());
@@ -99,8 +102,7 @@ public class ReplayController {
      *     {"offset": 51, "partition": 0},
      *     {"offset": 52, "partition": 0},
      *     {"offset": 53, "partition": 0}
-     *   ],
-     *   "initiatedBy": "user@example.com"
+     *   ]
      * }
      *
      * Response:
@@ -121,7 +123,10 @@ public class ReplayController {
      */
     @PostMapping("/bulk")
     public ResponseEntity<Map<String, Object>> bulkReplayMessages(
-            @Valid @RequestBody BulkReplayRequestDto request) {
+            @Valid @RequestBody BulkReplayRequestDto request, Authentication authentication) {
+
+        // The replay is recorded under the signed-in user, whatever the request body says
+        request.setInitiatedBy(authentication.getName());
 
         log.info("API: POST /api/replay/bulk - DLQ: {}, message count: {}",
                 request.getDlqTopicId(), request.getMessages().size());

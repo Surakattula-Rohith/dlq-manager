@@ -53,9 +53,9 @@ public class ReplayRequestDto {
     private Integer messagePartition;
 
     /**
-     * Optional: Who is initiating this replay
-     * Example: "admin@example.com", "admin"
-     * If null, service will use default: "system"
+     * Who is initiating this replay.
+     * Set by the controller to the signed-in user; a value sent by the client is ignored.
+     * If null (e.g. replays started from code), the service uses "system".
      */
     private String initiatedBy;
 
