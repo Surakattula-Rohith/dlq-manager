@@ -175,12 +175,24 @@ CI runs the full backend suite plus frontend lint and build on every push.
 </details>
 
 <details>
-<summary><strong>Message Browser & Replay</strong></summary>
+<summary><strong>Message Browser, Search & Replay</strong></summary>
 
 ![Message Browser with Error Breakdown](assets/04-topic-detail-error-breakdown.png)
+![Filtered by error type, replayed messages hidden](assets/27-search-filter.png)
 ![Message Detail](assets/05-message-detail-modal.png)
+![Message Browser Dark](assets/31-dark-topic-detail.png)
 ![Replay History](assets/06-replay-history.png)
 ![Replay History Dark](assets/17-dark-replay-history.png)
+
+</details>
+
+<details>
+<summary><strong>Sign-in, Roles & Activity</strong></summary>
+
+![Sign-in](assets/00-login.png)
+![Viewer: read-only message browser](assets/28-viewer-read-only.png)
+![Activity log](assets/29-activity.png)
+![Activity log Dark](assets/30-dark-activity.png)
 
 </details>
 
@@ -188,9 +200,8 @@ CI runs the full backend suite plus frontend lint and build on every push.
 <summary><strong>Alerts & Slack Notifications</strong></summary>
 
 ![Alert Rules](assets/20-alerts-rules.png)
-![Alert History - Firing](assets/24-alert-history-firing.png)
+![Alert History](assets/24-alert-history.png)
 ![Alert History - Snoozed](assets/25-alert-history-snoozed.png)
-![Alert History - Acknowledged](assets/21-alert-history-acknowledged.png)
 ![Alerts Dark](assets/18-dark-alerts.png)
 ![Snooze Modal Dark](assets/26-dark-alert-snooze-modal.png)
 ![Slack Notification](assets/22-slack-notification.png)
