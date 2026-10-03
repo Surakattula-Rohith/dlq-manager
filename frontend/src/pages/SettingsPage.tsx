@@ -1,12 +1,36 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 import { Header } from '../components/layout';
 import { kafkaApi } from '../api/kafka';
 import { notificationChannelsApi } from '../api/notificationChannels';
-import type { ConnectionTestResult } from '../api/kafka';
+import type { ConnectionTestResult, KafkaAuthentication, KafkaConnectionSettings } from '../api/kafka';
 import type { NotificationChannel, NotificationChannelType } from '../types';
 import { usePermissions } from '../context/AuthContext';
-import { Server, Database, CheckCircle, XCircle, Loader2, Plug, Save, Plus, Trash2, Edit2, Send, X, ChevronDown } from 'lucide-react';
+import { Server, Database, CheckCircle, XCircle, Loader2, Plug, Save, Plus, Trash2, Edit2, Send, X, ChevronDown, Lock, AlertTriangle } from 'lucide-react';
+
+interface KafkaForm {
+  bootstrapServers: string;
+  authentication: KafkaAuthentication;
+  encrypted: boolean;
+  username: string;
+  password: string;
+  caCertificate: string;
+}
+
+const LOGIN_OPTIONS: { value: KafkaAuthentication; label: string; hint: string }[] = [
+  { value: 'NONE', label: 'No login', hint: 'Anyone who can reach the brokers can connect. Fine for local development.' },
+  { value: 'SCRAM_SHA_512', label: 'Username + password (SCRAM-SHA-512)', hint: 'Used by AWS MSK, Aiven, Redpanda and most self-hosted clusters.' },
+  { value: 'SCRAM_SHA_256', label: 'Username + password (SCRAM-SHA-256)', hint: 'Like SCRAM-SHA-512, for clusters set up with SHA-256.' },
+  { value: 'PLAIN', label: 'Username + password (PLAIN)', hint: 'Used by Confluent Cloud: the API key is the username, the API secret is the password.' },
+];
+
+function describeSecurity(authentication: KafkaAuthentication, username: string | null, encrypted: boolean): string {
+  const login = authentication === 'NONE'
+    ? 'No login'
+    : `${authentication.replace('SCRAM_SHA_', 'SCRAM-SHA-')} login as ${username}`;
+  return `${login}, ${encrypted ? 'encrypted' : 'not encrypted'}`;
+}
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -25,20 +49,30 @@ export function SettingsPage() {
     retry: false,
   });
 
-  // null = user hasn't typed anything yet, so show the saved value from the server
-  const [bootstrapServersDraft, setBootstrapServers] = useState<string | null>(null);
-  const bootstrapServers = bootstrapServersDraft ?? kafkaConfig?.bootstrapServers ?? '';
+  // The draft holds only what the admin changed; everything else shows the saved value from the server.
+  // The password always starts empty: the server never sends it back.
+  const [draft, setDraft] = useState<Partial<KafkaForm>>({});
+  const form: KafkaForm = {
+    bootstrapServers: kafkaConfig?.bootstrapServers ?? '',
+    authentication: kafkaConfig?.authentication ?? 'NONE',
+    encrypted: kafkaConfig?.encrypted ?? false,
+    username: kafkaConfig?.username ?? '',
+    password: '',
+    caCertificate: kafkaConfig?.caCertificate ?? '',
+    ...draft,
+  };
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const testMutation = useMutation({
-    mutationFn: (servers: string) => kafkaApi.testConnection(servers),
+    mutationFn: (settings: KafkaConnectionSettings) => kafkaApi.testConnection(settings),
     onSuccess: (data) => setTestResult(data),
   });
 
   const saveMutation = useMutation({
-    mutationFn: (servers: string) => kafkaApi.saveConfig(servers),
+    mutationFn: (settings: KafkaConnectionSettings) => kafkaApi.saveConfig(settings),
     onSuccess: () => {
+      setDraft({});
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
       queryClient.invalidateQueries({ queryKey: ['kafkaConfig'] });
@@ -46,6 +80,35 @@ export function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['kafkaTopics'] });
     },
   });
+
+  // Any change means the connection has to be tested again before it can be saved
+  const updateForm = (changes: Partial<KafkaForm>) => {
+    setDraft((current) => ({ ...current, ...changes }));
+    setTestResult(null);
+    setSaveSuccess(false);
+    saveMutation.reset();
+  };
+
+  const needsLogin = form.authentication !== 'NONE';
+  const loginOption = LOGIN_OPTIONS.find((option) => option.value === form.authentication);
+  // The server reuses the saved password only for the same brokers and username
+  const savedPasswordFits = !!kafkaConfig?.passwordSet
+    && form.bootstrapServers.trim() === kafkaConfig.bootstrapServers
+    && form.username.trim() === (kafkaConfig.username ?? '');
+  const loginComplete = !needsLogin || (form.username.trim() !== '' && (form.password !== '' || savedPasswordFits));
+  const canTest = form.bootstrapServers.trim() !== '' && loginComplete;
+  const cannotStorePassword = needsLogin && kafkaConfig?.canStorePassword === false;
+
+  const connectionSettings = (): KafkaConnectionSettings => ({
+    bootstrapServers: form.bootstrapServers.trim(),
+    authentication: form.authentication,
+    encrypted: form.encrypted,
+    username: needsLogin ? form.username.trim() : undefined,
+    password: needsLogin && form.password ? form.password : undefined,
+    caCertificate: form.encrypted && form.caCertificate.trim() ? form.caCertificate.trim() : undefined,
+  });
+
+  const saveError = isAxiosError(saveMutation.error) ? saveMutation.error.response?.data?.error : undefined;
 
   const isConnected = !clusterError && clusterInfo;
   // First-time setup only when nothing was saved and the default address doesn't work either
@@ -101,12 +164,8 @@ export function SettingsPage() {
               </label>
               <input
                 type="text"
-                value={bootstrapServers}
-                onChange={(e) => {
-                  setBootstrapServers(e.target.value);
-                  setTestResult(null);
-                  setSaveSuccess(false);
-                }}
+                value={form.bootstrapServers}
+                onChange={(e) => updateForm({ bootstrapServers: e.target.value })}
                 placeholder="localhost:9092"
                 readOnly={!canAdminister}
                 className={`${inputClass} read-only:opacity-70 read-only:cursor-default`}
@@ -116,14 +175,130 @@ export function SettingsPage() {
               </p>
             </div>
 
+            {/* Security: login and encryption */}
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Lock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                <h4 className="font-medium text-gray-900 dark:text-white">Security</h4>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="kafka-login" className={labelClass}>Login</label>
+                  <div className="relative">
+                    <select
+                      id="kafka-login"
+                      value={form.authentication}
+                      onChange={(e) => updateForm({ authentication: e.target.value as KafkaAuthentication })}
+                      disabled={!canAdminister}
+                      className={`${inputClass} appearance-none pr-8 disabled:opacity-70`}
+                    >
+                      {LOGIN_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{loginOption?.hint}</p>
+                </div>
+
+                {needsLogin && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="kafka-username" className={labelClass}>Username</label>
+                      <input
+                        id="kafka-username"
+                        type="text"
+                        value={form.username}
+                        onChange={(e) => updateForm({ username: e.target.value })}
+                        autoComplete="off"
+                        readOnly={!canAdminister}
+                        className={`${inputClass} read-only:opacity-70 read-only:cursor-default`}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="kafka-password" className={labelClass}>Password</label>
+                      {canAdminister ? (
+                        <input
+                          id="kafka-password"
+                          type="password"
+                          value={form.password}
+                          onChange={(e) => updateForm({ password: e.target.value })}
+                          autoComplete="new-password"
+                          placeholder={savedPasswordFits ? 'Saved - leave empty to keep it' : ''}
+                          className={inputClass}
+                        />
+                      ) : (
+                        <p className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                          {kafkaConfig?.passwordSet ? 'Saved (hidden)' : 'Not set'}
+                        </p>
+                      )}
+                      {canAdminister && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {kafkaConfig?.passwordSet && !savedPasswordFits
+                            ? 'The address or username changed, so the saved password is not reused. Enter it again.'
+                            : 'Stored encrypted. It is never shown again after saving.'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={form.encrypted}
+                      onChange={(e) => updateForm({ encrypted: e.target.checked })}
+                      disabled={!canAdminister}
+                      className="w-4 h-4 accent-orange-600"
+                    />
+                    Encrypted connection (TLS)
+                  </label>
+                  {form.authentication === 'PLAIN' && !form.encrypted && (
+                    <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 mt-2">
+                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                      PLAIN sends the password as it is. Turn on encryption unless this is a test cluster.
+                    </p>
+                  )}
+                </div>
+
+                {form.encrypted && (
+                  <div>
+                    <label htmlFor="kafka-ca-certificate" className={labelClass}>Company certificate (optional)</label>
+                    <textarea
+                      id="kafka-ca-certificate"
+                      value={form.caCertificate}
+                      onChange={(e) => updateForm({ caCertificate: e.target.value })}
+                      placeholder={'-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----'}
+                      rows={4}
+                      spellCheck={false}
+                      readOnly={!canAdminister}
+                      className={`${inputClass} font-mono text-xs read-only:opacity-70 read-only:cursor-default`}
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Only needed when the brokers use a certificate from a company-internal authority. Paste its certificate (PEM text).
+                    </p>
+                  </div>
+                )}
+
+                {canAdminister && cannotStorePassword && (
+                  <div className="rounded-lg p-3 text-sm bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:border-amber-700 dark:text-amber-300">
+                    This server can't store a Kafka password yet. Set <span className="font-mono">DLQ_SECRET_KEY</span> on
+                    the backend and restart it. You can still test the connection.
+                  </div>
+                )}
+              </div>
+            </div>
+
             {canAdminister && (
             <div className="flex gap-3">
               <button
                 onClick={() => {
                   setTestResult(null);
-                  testMutation.mutate(bootstrapServers);
+                  testMutation.mutate(connectionSettings());
                 }}
-                disabled={!bootstrapServers.trim() || testMutation.isPending}
+                disabled={!canTest || testMutation.isPending}
                 className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {testMutation.isPending ? (
@@ -135,8 +310,8 @@ export function SettingsPage() {
               </button>
 
               <button
-                onClick={() => saveMutation.mutate(bootstrapServers)}
-                disabled={!bootstrapServers.trim() || saveMutation.isPending || !testResult?.success}
+                onClick={() => saveMutation.mutate(connectionSettings())}
+                disabled={!canTest || saveMutation.isPending || !testResult?.success || cannotStorePassword}
                 title={!testResult?.success ? 'Test the connection first before saving' : ''}
                 className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -191,6 +366,9 @@ export function SettingsPage() {
                   <XCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
                   <span className="font-medium text-red-700 dark:text-red-300">Failed to save configuration</span>
                 </div>
+                {saveError && (
+                  <p className="text-sm text-red-600 dark:text-red-400 mt-1">{saveError}</p>
+                )}
               </div>
             )}
           </div>
@@ -226,6 +404,11 @@ export function SettingsPage() {
                       ? `Cluster ID: ${clusterInfo?.clusterId || 'N/A'}`
                       : 'Unable to connect to Kafka cluster'}
                   </p>
+                  {kafkaConfig && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {describeSecurity(kafkaConfig.authentication, kafkaConfig.username, kafkaConfig.encrypted)}
+                    </p>
+                  )}
                 </div>
               </>
             )}
