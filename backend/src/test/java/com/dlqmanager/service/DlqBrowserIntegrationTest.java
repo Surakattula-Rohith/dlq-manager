@@ -89,6 +89,22 @@ class DlqBrowserIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void errorBreakdownIsRememberedWhileCountsStayLive() throws Exception {
+        String dlq = uniqueTopic("orders-dlq");
+        createTopic(dlq, 1);
+        produce(dlq, 0, 3, Map.of("X-Error-Message", "DB Connection Timeout"));
+        UUID id = register(dlq);
+        assertThat(dlqBrowserService.getErrorBreakdown(id)).containsEntry("DB Connection Timeout", 3L);
+
+        produce(dlq, 0, 2, Map.of("X-Error-Message", "DB Connection Timeout"));
+
+        // Scanned a moment ago, so the breakdown comes from memory...
+        assertThat(dlqBrowserService.getErrorBreakdown(id)).containsEntry("DB Connection Timeout", 3L);
+        // ...while the count is read from Kafka every time
+        assertThat(dlqBrowserService.getMessageCount(id)).isEqualTo(5);
+    }
+
+    @Test
     void searchFindsMatchesAcrossPartitionsAndPages() throws Exception {
         String dlq = uniqueTopic("orders-dlq");
         createTopic(dlq, 3);

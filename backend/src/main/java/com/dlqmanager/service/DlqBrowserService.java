@@ -58,15 +58,18 @@ public class DlqBrowserService {
     private final DlqTopicRepository dlqTopicRepository;
     private final KafkaConsumerPool consumerPool;
     private final ReplayMessageRepository replayMessageRepository;
+    private final ErrorBreakdownCache errorBreakdownCache;
 
     public DlqBrowserService(
             DlqTopicRepository dlqTopicRepository,
             KafkaConsumerPool consumerPool,
-            ReplayMessageRepository replayMessageRepository
+            ReplayMessageRepository replayMessageRepository,
+            ErrorBreakdownCache errorBreakdownCache
     ) {
         this.dlqTopicRepository = dlqTopicRepository;
         this.consumerPool = consumerPool;
         this.replayMessageRepository = replayMessageRepository;
+        this.errorBreakdownCache = errorBreakdownCache;
     }
 
     /**
@@ -373,13 +376,20 @@ public class DlqBrowserService {
      *
      * Note: Stops after MAX_SCAN_MESSAGES so very large DLQs stay responsive.
      *
+     * The result is remembered for a short time (see ErrorBreakdownCache), so new messages
+     * can take up to that long to show up here. Message counts are always live.
+     *
      * @param dlqTopicId UUID of the DLQ topic
-     * @return Map where key = error type, value = count of messages with that error
+     * @return Map where key = error type, value = count of messages with that error (read-only)
      */
     public Map<String, Long> getErrorBreakdown(UUID dlqTopicId) {
-        log.info("Getting error breakdown for DLQ topic ID: {}", dlqTopicId);
-
         DlqTopic dlqTopic = findDlqTopic(dlqTopicId);
+        return errorBreakdownCache.get(dlqTopic, () -> scanErrorBreakdown(dlqTopic));
+    }
+
+    private Map<String, Long> scanErrorBreakdown(DlqTopic dlqTopic) {
+        log.info("Scanning error breakdown for DLQ topic ID: {}", dlqTopic.getId());
+
         String topicName = dlqTopic.getDlqTopicName();
         String errorFieldPath = dlqTopic.getErrorFieldPath();
 

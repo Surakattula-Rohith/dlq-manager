@@ -119,7 +119,9 @@ cd backend && SERVER_PORT=8081 DB_URL='jdbc:postgresql://localhost:5433/dlqmanag
 cd frontend && FRONTEND_PORT=5174 BACKEND_URL=http://localhost:8081 npm run dev
 ```
 
-Backend variables: `SERVER_PORT`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS`, `SHOW_SQL`, `LOG_LEVEL`.
+Backend variables: `SERVER_PORT`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS`, `SHOW_SQL`, `LOG_LEVEL`, `ERROR_BREAKDOWN_CACHE_TTL`.
+
+The error breakdown reads every message in a DLQ, so its result is remembered for 30 seconds (`ERROR_BREAKDOWN_CACHE_TTL`, e.g. `2m`, or `0s` to turn it off) and shared by everyone viewing that topic. Message counts are always live.
 
 ### Sign-in
 

@@ -37,6 +37,7 @@
 - [x] Audit log with the real user for every action (Activity page)
 - [x] Safe concurrent replays: a message being replayed by one person can't be sent again by another at the same time
 - [x] Reuse Kafka connections (consumer pool, one shared admin client): a DLQ page loads ~8x faster
+- [x] Error breakdown remembered for 30 seconds and shared between viewers: ten people opening a DLQ cause one scan, not ten
 
 ---
 
