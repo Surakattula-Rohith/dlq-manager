@@ -5,15 +5,15 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.stereotype.Component;
 
-import java.util.Properties;
+import java.util.Map;
 
 /**
  * Builds KafkaProducers for message replay
  *
  * Why not a single @Bean producer?
- * - Kafka bootstrap servers can be changed from the Settings page at runtime
+ * - The Kafka connection can be changed from the Settings page at runtime
  * - A @Bean is created once at startup, so it would keep sending to the OLD cluster
- * - ReplayProducer asks this class for a new producer whenever the servers change
+ * - ReplayProducer asks this class for a new producer whenever the connection changes
  */
 @Component
 public class KafkaProducerConfig {
@@ -25,17 +25,14 @@ public class KafkaProducerConfig {
      * - Key type: String (e.g., "ORD-12345")
      * - Value type: String (JSON payload)
      *
-     * @param bootstrapServers Kafka brokers, e.g. "localhost:9092" or "broker1:9092,broker2:9092"
+     * @param connection how to reach the cluster (see KafkaConnection)
      * @return configured KafkaProducer instance
      */
-    public KafkaProducer<String, String> createProducer(String bootstrapServers) {
-        Properties props = new Properties();
-
+    public KafkaProducer<String, String> createProducer(KafkaConnection connection) {
         /*
-         * BOOTSTRAP_SERVERS_CONFIG: Where to find Kafka brokers
-         * Producer will connect to these addresses
+         * Where to find the Kafka brokers comes from the shared connection settings
          */
-        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        Map<String, Object> props = connection.clientProperties();
 
         /*
          * KEY/VALUE_SERIALIZER_CLASS_CONFIG: How to convert key and value to bytes

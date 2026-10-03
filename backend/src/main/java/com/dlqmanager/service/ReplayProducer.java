@@ -1,5 +1,6 @@
 package com.dlqmanager.service;
 
+import com.dlqmanager.config.KafkaConnection;
 import com.dlqmanager.config.KafkaProducerConfig;
 import com.dlqmanager.util.DlqHeaders;
 import jakarta.annotation.PreDestroy;
@@ -45,11 +46,11 @@ public class ReplayProducer {
     private final KafkaConfigService kafkaConfigService;
 
     /**
-     * Current producer and the bootstrap servers it was created for.
-     * Rebuilt when the servers change in Settings.
+     * Current producer and the connection it was created for.
+     * Rebuilt when the connection changes in Settings.
      */
     private KafkaProducer<String, String> kafkaProducer;
-    private String producerBootstrapServers;
+    private KafkaConnection producerConnection;
 
     public ReplayProducer(KafkaProducerConfig kafkaProducerConfig, KafkaConfigService kafkaConfigService) {
         this.kafkaProducerConfig = kafkaProducerConfig;
@@ -139,21 +140,21 @@ public class ReplayProducer {
     }
 
     /**
-     * Get a producer for the bootstrap servers currently saved in Settings.
-     * If the servers changed since the last replay, the old producer is closed
+     * Get a producer for the connection currently saved in Settings.
+     * If it changed since the last replay, the old producer is closed
      * and a new one is created, so replays never go to the previous cluster.
      */
     private synchronized KafkaProducer<String, String> currentProducer() {
-        String bootstrapServers = kafkaConfigService.getBootstrapServers();
+        KafkaConnection connection = kafkaConfigService.getConnection();
 
-        if (kafkaProducer == null || !bootstrapServers.equals(producerBootstrapServers)) {
+        if (kafkaProducer == null || !connection.equals(producerConnection)) {
             if (kafkaProducer != null) {
-                log.info("Kafka bootstrap servers changed from {} to {}, recreating producer",
-                        producerBootstrapServers, bootstrapServers);
+                log.info("Kafka connection changed from {} to {}, recreating producer",
+                        producerConnection, connection);
                 kafkaProducer.close(Duration.ofSeconds(5));
             }
-            kafkaProducer = kafkaProducerConfig.createProducer(bootstrapServers);
-            producerBootstrapServers = bootstrapServers;
+            kafkaProducer = kafkaProducerConfig.createProducer(connection);
+            producerConnection = connection;
         }
 
         return kafkaProducer;

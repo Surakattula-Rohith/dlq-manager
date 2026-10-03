@@ -1,5 +1,6 @@
 package com.dlqmanager.service;
 
+import com.dlqmanager.config.KafkaConnection;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -12,7 +13,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
-import java.util.Properties;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -33,7 +34,7 @@ import java.util.function.Function;
  * - A KafkaConsumer is not thread-safe, so a consumer is only used by one request at a time
  * - Consumers read with assign() + seek() and never commit offsets, so one consumer can serve
  *   any topic; its assignment is cleared when it comes back
- * - When the Kafka address changes in Settings, idle consumers for the old address are closed
+ * - When the Kafka connection changes in Settings, idle consumers for the old one are closed
  * - At most MAX_IDLE consumers are kept; extra ones are closed when they come back
  */
 @Component
@@ -44,7 +45,7 @@ public class KafkaConsumerPool {
     private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(2);
 
     private final KafkaConfigService kafkaConfigService;
-    private final Function<String, KafkaConsumer<String, String>> consumerFactory;
+    private final Function<KafkaConnection, KafkaConsumer<String, String>> consumerFactory;
     private final Deque<PooledConsumer> idle = new ArrayDeque<>();
     private boolean closed;
 
@@ -54,23 +55,23 @@ public class KafkaConsumerPool {
     }
 
     KafkaConsumerPool(KafkaConfigService kafkaConfigService,
-                      Function<String, KafkaConsumer<String, String>> consumerFactory) {
+                      Function<KafkaConnection, KafkaConsumer<String, String>> consumerFactory) {
         this.kafkaConfigService = kafkaConfigService;
         this.consumerFactory = consumerFactory;
     }
 
     /**
-     * Borrow a consumer for the current Kafka address. Close the lease to give it back.
+     * Borrow a consumer for the current Kafka connection. Close the lease to give it back.
      */
     public Lease borrow() {
-        String bootstrapServers = kafkaConfigService.getBootstrapServers();
+        KafkaConnection connection = kafkaConfigService.getConnection();
         List<PooledConsumer> outdated = new ArrayList<>();
         PooledConsumer reusable = null;
 
         synchronized (this) {
             while (reusable == null && !idle.isEmpty()) {
                 PooledConsumer candidate = idle.pollFirst();
-                if (candidate.bootstrapServers().equals(bootstrapServers)) {
+                if (candidate.connection().equals(connection)) {
                     reusable = candidate;
                 } else {
                     outdated.add(candidate);
@@ -80,7 +81,7 @@ public class KafkaConsumerPool {
 
         outdated.forEach(KafkaConsumerPool::closeQuietly);
         if (reusable == null) {
-            reusable = new PooledConsumer(consumerFactory.apply(bootstrapServers), bootstrapServers);
+            reusable = new PooledConsumer(consumerFactory.apply(connection), connection);
         }
         return new Lease(reusable);
     }
@@ -139,9 +140,8 @@ public class KafkaConsumerPool {
      * With the default, every partition switch cost half a second. We read stored history,
      * not a live stream, so there is nothing to gain from the broker waiting for new data.
      */
-    private static KafkaConsumer<String, String> createConsumer(String bootstrapServers) {
-        Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+    private static KafkaConsumer<String, String> createConsumer(KafkaConnection connection) {
+        Map<String, Object> props = connection.clientProperties();
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "dlq-manager-browser-" + UUID.randomUUID());
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
@@ -152,7 +152,7 @@ public class KafkaConsumerPool {
         return new KafkaConsumer<>(props);
     }
 
-    private record PooledConsumer(KafkaConsumer<String, String> consumer, String bootstrapServers) {
+    private record PooledConsumer(KafkaConsumer<String, String> consumer, KafkaConnection connection) {
     }
 
     /**

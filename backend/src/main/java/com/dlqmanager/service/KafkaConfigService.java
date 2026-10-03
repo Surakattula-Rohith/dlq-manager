@@ -1,5 +1,6 @@
 package com.dlqmanager.service;
 
+import com.dlqmanager.config.KafkaConnection;
 import com.dlqmanager.model.entity.KafkaConfig;
 import com.dlqmanager.model.enums.ActivityAction;
 import com.dlqmanager.repository.KafkaConfigRepository;
@@ -43,6 +44,14 @@ public class KafkaConfigService {
     }
 
     /**
+     * How to reach the cluster currently set in Settings.
+     * Every Kafka client is built from this (see KafkaConnection).
+     */
+    public KafkaConnection getConnection() {
+        return new KafkaConnection(getBootstrapServers());
+    }
+
+    /**
      * Get the saved config, or null if none exists yet.
      */
     public Optional<KafkaConfig> getConfig() {
@@ -82,8 +91,7 @@ public class KafkaConfigService {
 
         Map<String, Object> result = new HashMap<>();
 
-        Map<String, Object> adminProps = new HashMap<>();
-        adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers.trim());
+        Map<String, Object> adminProps = new KafkaConnection(bootstrapServers).clientProperties();
         adminProps.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000);
         adminProps.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 5000);
 

@@ -1,10 +1,10 @@
 package com.dlqmanager.service;
 
+import com.dlqmanager.config.KafkaConnection;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.ListTopicsOptions;
 import org.apache.kafka.clients.admin.TopicListing;
 import org.springframework.stereotype.Service;
@@ -32,7 +32,7 @@ public class KafkaAdminService {
     private final KafkaConfigService kafkaConfigService;
 
     private AdminClient adminClient;
-    private String adminClientBootstrapServers;
+    private KafkaConnection adminClientConnection;
 
     /**
      * List all Kafka topics in the cluster
@@ -160,22 +160,20 @@ public class KafkaAdminService {
     }
 
     /**
-     * One shared admin client (it is thread-safe), rebuilt only when the Kafka address
+     * One shared admin client (it is thread-safe), rebuilt only when the Kafka connection
      * changes in Settings. Creating one per call meant a new connection for every topic
      * check and every refresh of the cluster info.
      */
     private synchronized AdminClient adminClient() {
-        String bootstrapServers = kafkaConfigService.getBootstrapServers();
-        if (adminClient == null || !bootstrapServers.equals(adminClientBootstrapServers)) {
+        KafkaConnection connection = kafkaConfigService.getConnection();
+        if (adminClient == null || !connection.equals(adminClientConnection)) {
             if (adminClient != null) {
-                log.info("Kafka bootstrap servers changed from {} to {}, recreating admin client",
-                        adminClientBootstrapServers, bootstrapServers);
+                log.info("Kafka connection changed from {} to {}, recreating admin client",
+                        adminClientConnection, connection);
                 adminClient.close(CLOSE_TIMEOUT);
             }
-            Map<String, Object> props = new HashMap<>();
-            props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-            adminClient = AdminClient.create(props);
-            adminClientBootstrapServers = bootstrapServers;
+            adminClient = AdminClient.create(connection.clientProperties());
+            adminClientConnection = connection;
         }
         return adminClient;
     }

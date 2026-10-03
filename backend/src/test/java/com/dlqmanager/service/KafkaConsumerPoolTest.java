@@ -1,5 +1,6 @@
 package com.dlqmanager.service;
 
+import com.dlqmanager.config.KafkaConnection;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,8 +28,8 @@ class KafkaConsumerPoolTest {
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        when(kafkaConfigService.getBootstrapServers()).thenReturn("kafka-a:9092");
-        pool = new KafkaConsumerPool(kafkaConfigService, bootstrapServers -> {
+        when(kafkaConfigService.getConnection()).thenReturn(new KafkaConnection("kafka-a:9092"));
+        pool = new KafkaConsumerPool(kafkaConfigService, connection -> {
             KafkaConsumer<String, String> consumer = mock(KafkaConsumer.class);
             created.add(consumer);
             return consumer;
@@ -85,13 +86,13 @@ class KafkaConsumerPoolTest {
     }
 
     @Test
-    void newKafkaAddressGetsNewConsumersAndClosesTheOldOnes() {
+    void newKafkaConnectionGetsNewConsumersAndClosesTheOldOnes() {
         KafkaConsumer<String, String> old;
         try (KafkaConsumerPool.Lease lease = pool.borrow()) {
             old = lease.consumer();
         }
 
-        when(kafkaConfigService.getBootstrapServers()).thenReturn("kafka-b:9092");
+        when(kafkaConfigService.getConnection()).thenReturn(new KafkaConnection("kafka-b:9092"));
         try (KafkaConsumerPool.Lease lease = pool.borrow()) {
             assertThat(lease.consumer()).isNotSameAs(old);
         }
