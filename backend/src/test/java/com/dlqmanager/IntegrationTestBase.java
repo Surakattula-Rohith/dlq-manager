@@ -42,6 +42,8 @@ public abstract class IntegrationTestBase {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
+        // Lets the app store a Kafka password (encrypted) when a test saves secured connection settings
+        registry.add("dlq.secret-key", () -> "integration-test-secret-key");
     }
 
     // --- Helpers for tests ---

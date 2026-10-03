@@ -74,6 +74,9 @@ services:
       DLQ_ADMIN_PASSWORD: ${DLQ_ADMIN_PASSWORD:-admin}
       DLQ_OPERATOR_PASSWORD: ${DLQ_OPERATOR_PASSWORD:-operator}
       DLQ_VIEWER_PASSWORD: ${DLQ_VIEWER_PASSWORD:-viewer}
+      # Only needed to connect to a secured Kafka from the Settings page:
+      # the key that encrypts the saved Kafka password (any long random text)
+      DLQ_SECRET_KEY: ${DLQ_SECRET_KEY:-}
     restart: unless-stopped
     networks:
       - dlq-network

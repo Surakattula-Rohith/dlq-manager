@@ -1,6 +1,7 @@
 package com.dlqmanager.controller;
 
-import com.dlqmanager.model.entity.KafkaConfig;
+import com.dlqmanager.model.dto.KafkaConfigRequest;
+import com.dlqmanager.model.dto.KafkaConfigView;
 import com.dlqmanager.service.KafkaConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,69 +21,70 @@ public class KafkaConfigController {
 
     /**
      * GET /api/kafka/config - Get current Kafka configuration
+     *
+     * The Kafka password is never part of the response, only "passwordSet".
      */
     @GetMapping
     public ResponseEntity<Map<String, Object>> getConfig() {
         log.info("API: Getting Kafka config");
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        response.put("bootstrapServers", kafkaConfigService.getBootstrapServers());
-        response.put("configured", kafkaConfigService.isConfigured());
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(toResponse(kafkaConfigService.describe()));
     }
 
     /**
      * PUT /api/kafka/config - Save/update Kafka configuration
+     *
+     * Body: bootstrapServers (required), and optionally authentication, encrypted,
+     * username, password, caCertificate (see KafkaConfigRequest).
      */
     @PutMapping
-    public ResponseEntity<Map<String, Object>> saveConfig(@RequestBody Map<String, String> body) {
+    public ResponseEntity<Map<String, Object>> saveConfig(@RequestBody KafkaConfigRequest request) {
         log.info("API: Saving Kafka config");
 
-        String bootstrapServers = body.get("bootstrapServers");
-        if (bootstrapServers == null || bootstrapServers.trim().isEmpty()) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "bootstrapServers is required");
-            return ResponseEntity.badRequest().body(errorResponse);
-        }
-
         try {
-            KafkaConfig config = kafkaConfigService.saveConfig(bootstrapServers);
+            return ResponseEntity.ok(toResponse(kafkaConfigService.saveConfig(request)));
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("bootstrapServers", config.getBootstrapServers());
-            response.put("configured", true);
-
-            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            // Something is missing in the request, or the server can't store a password yet
+            return ResponseEntity.badRequest().body(errorResponse(e.getMessage()));
 
         } catch (Exception e) {
             log.error("Failed to save Kafka config", e);
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", e.getMessage());
-            return ResponseEntity.status(500).body(errorResponse);
+            return ResponseEntity.status(500).body(errorResponse(e.getMessage()));
         }
     }
 
     /**
-     * POST /api/kafka/config/test - Test connection to given bootstrap servers
+     * POST /api/kafka/config/test - Test a connection with the given settings (nothing is saved)
      */
     @PostMapping("/test")
-    public ResponseEntity<Map<String, Object>> testConnection(@RequestBody Map<String, String> body) {
+    public ResponseEntity<Map<String, Object>> testConnection(@RequestBody KafkaConfigRequest request) {
         log.info("API: Testing Kafka connection");
 
-        String bootstrapServers = body.get("bootstrapServers");
-        if (bootstrapServers == null || bootstrapServers.trim().isEmpty()) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("error", "bootstrapServers is required");
-            return ResponseEntity.badRequest().body(errorResponse);
+        if (request.bootstrapServers() == null || request.bootstrapServers().trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(errorResponse("bootstrapServers is required"));
         }
 
-        Map<String, Object> result = kafkaConfigService.testConnection(bootstrapServers);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(kafkaConfigService.testConnection(request));
+    }
+
+    private static Map<String, Object> toResponse(KafkaConfigView view) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("bootstrapServers", view.bootstrapServers());
+        response.put("configured", view.configured());
+        response.put("authentication", view.authentication());
+        response.put("encrypted", view.encrypted());
+        response.put("username", view.username());
+        response.put("passwordSet", view.passwordSet());
+        response.put("caCertificate", view.caCertificate());
+        response.put("canStorePassword", view.canStorePassword());
+        return response;
+    }
+
+    private static Map<String, Object> errorResponse(String message) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", false);
+        response.put("error", message);
+        return response;
     }
 }
