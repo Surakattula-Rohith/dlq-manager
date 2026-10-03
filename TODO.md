@@ -38,6 +38,7 @@
 - [x] Safe concurrent replays: a message being replayed by one person can't be sent again by another at the same time
 - [x] Reuse Kafka connections (consumer pool, one shared admin client): a DLQ page loads ~8x faster
 - [x] Error breakdown remembered for 30 seconds and shared between viewers: ten people opening a DLQ cause one scan, not ten
+- [x] Connect to secured Kafka clusters: SASL login (PLAIN, SCRAM-SHA-256/512) and TLS with an optional company certificate; the password is stored encrypted and never sent back
 
 ---
 
@@ -45,7 +46,7 @@
 
 - [ ] Multi-cluster support with cluster switching
 - [ ] Connection profiles (dev / staging / prod)
-- [ ] SASL/SSL authentication support
+- [ ] Client certificate (mTLS), Kerberos and OAuth logins
 
 ---
 

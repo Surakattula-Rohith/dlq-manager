@@ -31,7 +31,7 @@ This project started as a weekend experiment and has grown into a full platform 
 - **Analyze** error patterns with a per-topic error breakdown
 - **Replay** single or bulk messages back to the source topic
 - **Track** every replay operation with a full audit trail
-- **Configure** Kafka connections from the UI — no restart needed
+- **Configure** Kafka connections from the UI — no restart needed, including clusters that need a login and encryption (SASL + TLS)
 - **Alert** when a DLQ crosses a threshold, with Slack notifications
 - **Share** with a team: sign-in with viewer, operator and admin roles
 - **Audit** who did what on the Activity page: replays, alert actions, sign-ins and every configuration change
@@ -149,6 +149,28 @@ The web UI keeps you signed in with a session cookie (8 hours, `SESSION_TIMEOUT`
 curl -u viewer:viewer http://localhost:3000/api/dlq-topics     # :8080 when running from source
 ```
 
+### Connecting to a secured Kafka
+
+A company cluster usually needs an encrypted connection and a login. An admin sets both under **Settings → Security**, and the connection test has to pass before it can be saved:
+
+| Login | Typically used by |
+|-------|-------------------|
+| No login | Local development |
+| Username + password (SCRAM-SHA-512 / SCRAM-SHA-256) | AWS MSK, Aiven, Redpanda, most self-hosted clusters |
+| Username + password (PLAIN) | Confluent Cloud (API key and secret) |
+
+- **Encrypted connection (TLS)** — one checkbox. If the brokers use a certificate from a company-internal authority, paste that authority's certificate (PEM text) into the box below it; no keystore files are needed.
+- **The Kafka password** is stored encrypted (AES-256-GCM). The key comes from `DLQ_SECRET_KEY`, which the backend needs to be started with — without it the app refuses to store a password rather than keep it as plain text. The password is never sent back to the browser, never logged, and only reused for the same brokers and username it was saved for.
+- When a test fails, the message says what to fix: wrong password, untrusted certificate, or brokers that expect a login or encryption that wasn't used.
+
+```bash
+DLQ_SECRET_KEY='any long random text' docker compose up -d     # keep the same key between restarts
+```
+
+To keep the Kafka password out of the app's database entirely, give the connection to the backend as environment variables instead (used until something is saved from Settings): `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_AUTHENTICATION` (`NONE`, `PLAIN`, `SCRAM_SHA_256`, `SCRAM_SHA_512`), `KAFKA_ENCRYPTED`, `KAFKA_USERNAME`, `KAFKA_PASSWORD`, `KAFKA_CA_CERTIFICATE`.
+
+Not supported yet: client certificates (mTLS), Kerberos and OAuth logins.
+
 ---
 
 ## Running Tests
@@ -158,7 +180,7 @@ cd backend && ./mvnw test
 ```
 
 - **Unit tests** — header parsing, message conversion, alert rules, webhook safety (no infrastructure needed)
-- **Integration tests** — run against real PostgreSQL and Kafka started automatically with [Testcontainers](https://testcontainers.com) (Docker must be running): multi-partition paging, paging after retention, replay, duplicate-replay protection, sign-in and CSRF protection
+- **Integration tests** — run against real PostgreSQL and Kafka started automatically with [Testcontainers](https://testcontainers.com) (Docker must be running): multi-partition paging, paging after retention, replay, duplicate-replay protection, sign-in and CSRF protection. One test starts a second Kafka that only accepts TLS plus a login, and browses and replays through it
 
 CI runs the full backend suite plus frontend lint and build on every push.
 
@@ -215,9 +237,9 @@ CI runs the full backend suite plus frontend lint and build on every push.
 <summary><strong>Settings</strong></summary>
 
 ![Settings](assets/10-settings-kafka-config.png)
-![Settings Dark](assets/19-dark-settings.png)
-![Connection Test Success](assets/11-settings-connection-test-success.png)
-![Connection Failed](assets/13-settings-connection-test-failed.png)
+![Secured Kafka: Connection Test Success](assets/11-settings-connection-test-success.png)
+![Secured Kafka: Connection Test Failed](assets/13-settings-connection-test-failed.png)
+![Secured Kafka Saved (Dark)](assets/19-dark-settings.png)
 ![Add DLQ Topic](assets/09-add-topic-modal.png)
 
 </details>
@@ -262,9 +284,9 @@ All other endpoints need a session (the web UI) or HTTP Basic credentials (scrip
 |--------|----------|-------------|
 | `GET` | `/api/kafka/cluster-info` | Cluster information |
 | `GET` | `/api/kafka/discover-dlqs` | Auto-discover DLQ topics |
-| `GET` | `/api/kafka/config` | Get current config |
-| `PUT` | `/api/kafka/config` | Save bootstrap servers |
-| `POST` | `/api/kafka/config/test` | Test connection |
+| `GET` | `/api/kafka/config` | Get current connection settings (never the password) |
+| `PUT` | `/api/kafka/config` | Save brokers, login and encryption settings |
+| `POST` | `/api/kafka/config/test` | Test a connection without saving it |
 
 ### Alerts
 | Method | Endpoint | Description |
