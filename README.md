@@ -35,6 +35,7 @@ This project started as a weekend experiment and has grown into a full platform 
 - **Alert** when a DLQ crosses a threshold, with Slack notifications
 - **Share** with a team: sign-in with viewer, operator and admin roles
 - **Audit** who did what on the Activity page: replays, alert actions, sign-ins and every configuration change
+- **Follow** the team in Slack: replays, alert actions and setup changes are posted to the channels that opt in
 
 ---
 
@@ -149,6 +150,18 @@ The web UI keeps you signed in with a session cookie (8 hours, `SESSION_TIMEOUT`
 curl -u viewer:viewer http://localhost:3000/api/dlq-topics     # :8080 when running from source
 ```
 
+### Team feed in Slack
+
+A Slack channel added under **Settings → Notification Channels** can also follow what people do, so the team sees it without opening the app. Each channel chooses what it follows:
+
+| Follows | Posted when someone | Example |
+|---------|---------------------|---------|
+| Replays | replays messages | `operator replayed messages from orders-dlq - 12 message(s): 12 succeeded, 0 failed` |
+| Alert actions | acknowledges or snoozes an alert | `operator snoozed the alert Payments backlog - payments-dlq, for 60 min` |
+| Setup changes | changes DLQ topics, alert rules, channels or the Kafka connection | `admin added DLQ topic payments-dlq - source: payments, status: ACTIVE` |
+
+Posts are sent in the background, in the order things happened: a slow or unreachable Slack never delays or fails a replay (the Activity page keeps the full record either way). Sign-ins are never posted, and names typed by people can't trigger `@channel` mentions or links.
+
 ### Connecting to a secured Kafka
 
 A company cluster usually needs an encrypted connection and a login. An admin sets both under **Settings → Security**, and the connection test has to pass before it can be saved:
@@ -230,6 +243,7 @@ CI runs the full backend suite plus frontend lint and build on every push.
 ![Snooze Modal Dark](assets/26-dark-alert-snooze-modal.png)
 ![Slack Notification](assets/22-slack-notification.png)
 ![Slack Multiple Alerts](assets/23-slack-multiple-alerts.png)
+![Slack Team Feed Settings](assets/32-slack-team-feed.png)
 
 </details>
 
@@ -300,7 +314,8 @@ All other endpoints need a session (the web UI) or HTTP Basic credentials (scrip
 | `POST` | `/api/alert-events/{id}/acknowledge` | Acknowledge alert |
 | `POST` | `/api/alert-events/{id}/snooze` | Snooze alert |
 | `GET` | `/api/notification-channels` | List channels |
-| `POST` | `/api/notification-channels` | Create channel |
+| `POST` | `/api/notification-channels` | Create channel (`activityFeed`: `REPLAYS`, `ALERTS`, `CHANGES` to also post team activity) |
+| `PUT` | `/api/notification-channels/{id}` | Update channel |
 | `POST` | `/api/notification-channels/{id}/test` | Test channel |
 
 </details>

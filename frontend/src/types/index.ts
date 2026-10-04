@@ -95,12 +95,16 @@ export type AlertType = 'THRESHOLD' | 'TIME_WINDOW';
 export type AlertStatus = 'FIRING' | 'ACKNOWLEDGED' | 'SNOOZED';
 export type NotificationChannelType = 'SLACK';
 
+// Kinds of team activity a Slack channel can follow (the "team feed")
+export type ActivityCategory = 'REPLAYS' | 'ALERTS' | 'CHANGES';
+
 export interface NotificationChannel {
   id: string;
   name: string;
   type: NotificationChannelType;
   configuration: string; // JSON string
   enabled: boolean;
+  activityFeed: ActivityCategory[]; // empty = the channel only receives DLQ alerts
   createdAt: string;
   updatedAt: string;
 }

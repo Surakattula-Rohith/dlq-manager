@@ -39,6 +39,7 @@
 - [x] Reuse Kafka connections (consumer pool, one shared admin client): a DLQ page loads ~8x faster
 - [x] Error breakdown remembered for 30 seconds and shared between viewers: ten people opening a DLQ cause one scan, not ten
 - [x] Connect to secured Kafka clusters: SASL login (PLAIN, SCRAM-SHA-256/512) and TLS with an optional company certificate; the password is stored encrypted and never sent back
+- [x] Team feed: Slack channels can follow replays, alert actions and setup changes as they happen (sent in the background, never blocking the action)
 
 ---
 

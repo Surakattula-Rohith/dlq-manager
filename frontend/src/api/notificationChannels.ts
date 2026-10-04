@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { NotificationChannel } from '../types';
+import type { ActivityCategory, NotificationChannel } from '../types';
 
 export const notificationChannelsApi = {
   getAll: async (): Promise<NotificationChannel[]> => {
@@ -11,6 +11,7 @@ export const notificationChannelsApi = {
     name: string;
     type: string;
     configuration: string;
+    activityFeed: ActivityCategory[];
   }): Promise<NotificationChannel> => {
     const response = await apiClient.post('/api/notification-channels', data);
     return response.data.channel;
@@ -21,6 +22,7 @@ export const notificationChannelsApi = {
     type: string;
     configuration: string;
     enabled: boolean;
+    activityFeed: ActivityCategory[];
   }): Promise<NotificationChannel> => {
     const response = await apiClient.put(`/api/notification-channels/${id}`, data);
     return response.data.channel;

@@ -5,7 +5,7 @@ import { Header } from '../components/layout';
 import { kafkaApi } from '../api/kafka';
 import { notificationChannelsApi } from '../api/notificationChannels';
 import type { ConnectionTestResult, KafkaAuthentication, KafkaConnectionSettings } from '../api/kafka';
-import type { NotificationChannel, NotificationChannelType } from '../types';
+import type { ActivityCategory, NotificationChannel, NotificationChannelType } from '../types';
 import { usePermissions } from '../context/AuthContext';
 import { Server, Database, CheckCircle, XCircle, Loader2, Plug, Save, Plus, Trash2, Edit2, Send, X, ChevronDown, Lock, AlertTriangle } from 'lucide-react';
 
@@ -466,6 +466,28 @@ const labelClass2 = 'block text-sm font-medium text-gray-700 dark:text-gray-300 
 
 const CHANNEL_ICONS: Record<string, string> = { SLACK: '💬' };
 
+// Team feed: what a channel can be told about as it happens, besides DLQ alerts
+const FEED_OPTIONS: { value: ActivityCategory; label: string; hint: string }[] = [
+  { value: 'REPLAYS', label: 'Replays', hint: 'Someone replays messages' },
+  { value: 'ALERTS', label: 'Alert actions', hint: 'Someone acknowledges or snoozes an alert' },
+  { value: 'CHANGES', label: 'Setup changes', hint: 'DLQ topics, alert rules, channels or the Kafka connection change' },
+];
+
+function describeFeed(activityFeed: ActivityCategory[]): string {
+  return FEED_OPTIONS
+    .filter((option) => activityFeed.includes(option.value))
+    .map((option) => option.label.toLowerCase())
+    .join(', ');
+}
+
+// The server explains what is wrong (e.g. the webhook is not a Slack address)
+function serverMessage(error: unknown): string {
+  if (isAxiosError(error) && typeof error.response?.data?.error === 'string') {
+    return error.response.data.error;
+  }
+  return error instanceof Error ? error.message : 'Something went wrong';
+}
+
 function NotificationChannelsSection({ cardClass }: { cardClass: string }) {
   const { canAdminister } = usePermissions();
   const [showModal, setShowModal] = useState(false);
@@ -511,7 +533,7 @@ function NotificationChannelsSection({ cardClass }: { cardClass: string }) {
       ) : channels.length === 0 ? (
         <div className="py-6 text-center text-gray-500 dark:text-gray-400">
           <p className="text-sm">No notification channels configured.</p>
-          <p className="text-xs mt-1">Add a Slack channel to receive DLQ alerts.</p>
+          <p className="text-xs mt-1">Add a Slack channel to receive DLQ alerts and team activity.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -521,7 +543,11 @@ function NotificationChannelsSection({ cardClass }: { cardClass: string }) {
                 <span className="text-xl">{CHANNEL_ICONS[channel.type] ?? '📣'}</span>
                 <div>
                   <p className="font-medium text-gray-900 dark:text-white text-sm">{channel.name}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{channel.type} {!channel.enabled && '· Disabled'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {channel.type}
+                    {channel.activityFeed?.length > 0 && ` · Team feed: ${describeFeed(channel.activityFeed)}`}
+                    {!channel.enabled && ' · Disabled'}
+                  </p>
                 </div>
               </div>
               {canAdminister && (
@@ -589,6 +615,7 @@ function ChannelModal({ editing, onClose, onSaved }: {
   const [name, setName] = useState(editing?.name ?? '');
   const [type, setType] = useState<NotificationChannelType>(editing?.type ?? 'SLACK');
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
+  const [activityFeed, setActivityFeed] = useState<ActivityCategory[]>(editing?.activityFeed ?? []);
   const [configValues, setConfigValues] = useState<Record<string, string>>(() => {
     if (editing?.configuration) {
       try { return JSON.parse(editing.configuration); } catch { return {}; }
@@ -600,15 +627,19 @@ function ChannelModal({ editing, onClose, onSaved }: {
   const createMutation = useMutation({
     mutationFn: notificationChannelsApi.create,
     onSuccess: onSaved,
-    onError: (e: Error) => setError(e.message),
+    onError: (e: unknown) => setError(serverMessage(e)),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Parameters<typeof notificationChannelsApi.update>[1] }) =>
       notificationChannelsApi.update(id, data),
     onSuccess: onSaved,
-    onError: (e: Error) => setError(e.message),
+    onError: (e: unknown) => setError(serverMessage(e)),
   });
+
+  const toggleFeed = (category: ActivityCategory) =>
+    setActivityFeed((current) =>
+      current.includes(category) ? current.filter((c) => c !== category) : [...current, category]);
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
@@ -631,9 +662,9 @@ function ChannelModal({ editing, onClose, onSaved }: {
     const configuration = JSON.stringify(configValues);
 
     if (editing) {
-      updateMutation.mutate({ id: editing.id, data: { name: name.trim(), type, configuration, enabled } });
+      updateMutation.mutate({ id: editing.id, data: { name: name.trim(), type, configuration, enabled, activityFeed } });
     } else {
-      createMutation.mutate({ name: name.trim(), type, configuration });
+      createMutation.mutate({ name: name.trim(), type, configuration, activityFeed });
     }
   };
 
@@ -681,6 +712,29 @@ function ChannelModal({ editing, onClose, onSaved }: {
               />
             </div>
           ))}
+
+          <fieldset>
+            <legend className={labelClass2}>Team feed</legend>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+              Besides DLQ alerts, post to this channel when:
+            </p>
+            <div className="space-y-2">
+              {FEED_OPTIONS.map((option) => (
+                <label key={option.value} className="flex items-start gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={activityFeed.includes(option.value)}
+                    onChange={() => toggleFeed(option.value)}
+                    className="w-4 h-4 mt-0.5 accent-orange-600"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {option.label}
+                    <span className="block text-xs text-gray-500 dark:text-gray-400">{option.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
           {editing && (
             <div className="flex items-center gap-3">
