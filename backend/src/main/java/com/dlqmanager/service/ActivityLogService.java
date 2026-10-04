@@ -36,6 +36,7 @@ public class ActivityLogService {
     private static final int MAX_DETAILS = 1000;
 
     private final ActivityEventRepository activityEventRepository;
+    private final ActivityFeedService activityFeedService;
 
     /**
      * Record an action by the signed-in user ("system" when nobody is signed in, e.g. scheduled jobs)
@@ -56,6 +57,8 @@ public class ActivityLogService {
             event.setTarget(truncate(target, MAX_TARGET));
             event.setDetails(truncate(details, MAX_DETAILS));
             activityEventRepository.save(event);
+            // Slack channels that follow this kind of activity hear about it (sent in the background)
+            activityFeedService.post(event);
         } catch (Exception e) {
             log.error("Could not record activity {} by {} on {}", action, username, target, e);
         }

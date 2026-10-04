@@ -1,6 +1,7 @@
 package com.dlqmanager.service;
 
 import com.dlqmanager.model.entity.NotificationChannel;
+import com.dlqmanager.model.enums.ActivityCategory;
 import com.dlqmanager.model.enums.NotificationChannelType;
 import com.dlqmanager.repository.AlertRuleRepository;
 import com.dlqmanager.repository.NotificationChannelRepository;
@@ -11,7 +12,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.EnumSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,7 +51,7 @@ class NotificationChannelServiceTest {
     @Test
     void createRejectsNonSlackWebhook() {
         assertThatThrownBy(() -> service.create("evil", NotificationChannelType.SLACK,
-                "{\"webhookUrl\":\"http://169.254.169.254/latest/meta-data\"}"))
+                "{\"webhookUrl\":\"http://169.254.169.254/latest/meta-data\"}", null))
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(notificationChannelRepository, never()).save(any());
@@ -56,7 +59,7 @@ class NotificationChannelServiceTest {
 
     @Test
     void createRejectsInvalidJson() {
-        assertThatThrownBy(() -> service.create("broken", NotificationChannelType.SLACK, "not json"))
+        assertThatThrownBy(() -> service.create("broken", NotificationChannelType.SLACK, "not json", null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -68,7 +71,7 @@ class NotificationChannelServiceTest {
 
         // The UI only ever saw the masked value and sends it back unchanged
         NotificationChannel updated = service.update(existing.getId(), "#renamed", NotificationChannelType.SLACK,
-                "{\"webhookUrl\":\"https://hooks.slack.com/****1234\"}", true);
+                "{\"webhookUrl\":\"https://hooks.slack.com/****1234\"}", true, null);
 
         assertThat(updated.getName()).isEqualTo("#renamed");
         assertThat(updated.getConfiguration()).contains(REAL_WEBHOOK);
@@ -82,9 +85,39 @@ class NotificationChannelServiceTest {
         when(notificationChannelRepository.save(any())).then(returnsFirstArg());
 
         NotificationChannel updated = service.update(existing.getId(), "#alerts", NotificationChannelType.SLACK,
-                "{\"webhookUrl\":\"" + newWebhook + "\"}", true);
+                "{\"webhookUrl\":\"" + newWebhook + "\"}", true, null);
 
         assertThat(updated.getConfiguration()).contains(newWebhook).doesNotContain(REAL_WEBHOOK);
+    }
+
+    @Test
+    void updateWithoutATeamFeedKeepsWhatTheChannelFollows() {
+        NotificationChannel existing = channel(REAL_WEBHOOK);
+        existing.setActivityFeed(EnumSet.of(ActivityCategory.REPLAYS));
+        when(notificationChannelRepository.findById(existing.getId())).thenReturn(Optional.of(existing));
+        when(notificationChannelRepository.save(any())).then(returnsFirstArg());
+
+        NotificationChannel updated = service.update(existing.getId(), "#alerts", NotificationChannelType.SLACK,
+                "{\"webhookUrl\":\"https://hooks.slack.com/****1234\"}", true, null);
+
+        assertThat(updated.getActivityFeed()).containsExactly(ActivityCategory.REPLAYS);
+    }
+
+    @Test
+    void updateCanChangeOrClearTheTeamFeed() {
+        NotificationChannel existing = channel(REAL_WEBHOOK);
+        existing.setActivityFeed(EnumSet.of(ActivityCategory.REPLAYS));
+        when(notificationChannelRepository.findById(existing.getId())).thenReturn(Optional.of(existing));
+        when(notificationChannelRepository.save(any())).then(returnsFirstArg());
+
+        NotificationChannel changed = service.update(existing.getId(), "#alerts", NotificationChannelType.SLACK,
+                "{\"webhookUrl\":\"https://hooks.slack.com/****1234\"}", true,
+                EnumSet.of(ActivityCategory.ALERTS, ActivityCategory.CHANGES));
+        assertThat(changed.getActivityFeed()).containsExactly(ActivityCategory.ALERTS, ActivityCategory.CHANGES);
+
+        NotificationChannel cleared = service.update(existing.getId(), "#alerts", NotificationChannelType.SLACK,
+                "{\"webhookUrl\":\"https://hooks.slack.com/****1234\"}", true, Set.of());
+        assertThat(cleared.getActivityFeed()).isEmpty();
     }
 
     @Test

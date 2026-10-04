@@ -34,6 +34,15 @@ public class NotificationService {
         }
     }
 
+    /**
+     * Post a ready-made line of text to a channel (used by the team feed).
+     *
+     * @throws Exception if the webhook is not a Slack webhook or Slack can't be reached
+     */
+    public void sendText(NotificationChannel channel, String text) throws Exception {
+        restTemplate.postForObject(getSlackWebhookUrl(channel), Map.of("text", text), String.class);
+    }
+
     public Map<String, Object> testChannel(NotificationChannel channel) {
         Map<String, Object> result = new HashMap<>();
         try {

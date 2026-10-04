@@ -5,14 +5,24 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
+
+import java.time.Duration;
 
 @Configuration
 public class AppConfig {
 
+    /**
+     * Used for Slack webhooks. Without timeouts a Slack outage would leave the alert
+     * scheduler and the team feed waiting on a connection forever.
+     */
     @Bean
     public RestTemplate restTemplate() {
-        return new RestTemplate();
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(5));
+        requestFactory.setReadTimeout(Duration.ofSeconds(10));
+        return new RestTemplate(requestFactory);
     }
 
     @Bean

@@ -1,6 +1,7 @@
 package com.dlqmanager.controller;
 
 import com.dlqmanager.model.entity.NotificationChannel;
+import com.dlqmanager.model.enums.ActivityCategory;
 import com.dlqmanager.model.enums.NotificationChannelType;
 import com.dlqmanager.service.NotificationChannelService;
 import lombok.RequiredArgsConstructor;
@@ -8,10 +9,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -57,7 +60,8 @@ public class NotificationChannelController {
                 return badRequest("configuration is required");
             }
 
-            NotificationChannel channel = notificationChannelService.create(name, type, configuration);
+            NotificationChannel channel = notificationChannelService.create(name, type, configuration,
+                    parseActivityFeed(body.get("activityFeed")));
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("channel", toMap(channel));
@@ -78,7 +82,9 @@ public class NotificationChannelController {
             String configuration = (String) body.get("configuration");
             boolean enabled = Boolean.TRUE.equals(body.get("enabled"));
 
-            NotificationChannel channel = notificationChannelService.update(id, name, type, configuration, enabled);
+            // activityFeed left out = keep what the channel follows today
+            NotificationChannel channel = notificationChannelService.update(id, name, type, configuration, enabled,
+                    parseActivityFeed(body.get("activityFeed")));
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("channel", toMap(channel));
@@ -114,9 +120,34 @@ public class NotificationChannelController {
         m.put("type", channel.getType().name());
         m.put("configuration", notificationChannelService.maskedConfiguration(channel)); // webhook URL is a secret
         m.put("enabled", channel.isEnabled());
+        m.put("activityFeed", channel.getActivityFeed().stream().map(Enum::name).toList());
         m.put("createdAt", channel.getCreatedAt() != null ? channel.getCreatedAt().toString() : null);
         m.put("updatedAt", channel.getUpdatedAt() != null ? channel.getUpdatedAt().toString() : null);
         return m;
+    }
+
+    /**
+     * "activityFeed": ["REPLAYS", "ALERTS", "CHANGES"] - the kinds of team activity posted to the channel
+     *
+     * @return the categories, or null if the field was left out
+     */
+    private static Set<ActivityCategory> parseActivityFeed(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (!(value instanceof List<?> names)) {
+            throw new IllegalArgumentException("activityFeed must be a list, e.g. [\"REPLAYS\", \"ALERTS\"]");
+        }
+        Set<ActivityCategory> categories = EnumSet.noneOf(ActivityCategory.class);
+        for (Object name : names) {
+            try {
+                categories.add(ActivityCategory.valueOf(String.valueOf(name)));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Unknown activityFeed value '" + name
+                        + "'. Use REPLAYS, ALERTS or CHANGES.");
+            }
+        }
+        return categories;
     }
 
     private ResponseEntity<Map<String, Object>> badRequest(String message) {

@@ -3,6 +3,7 @@ package com.dlqmanager.service;
 import com.dlqmanager.model.entity.AlertRule;
 import com.dlqmanager.model.entity.NotificationChannel;
 import com.dlqmanager.model.enums.ActivityAction;
+import com.dlqmanager.model.enums.ActivityCategory;
 import com.dlqmanager.model.enums.NotificationChannelType;
 import com.dlqmanager.repository.AlertRuleRepository;
 import com.dlqmanager.repository.NotificationChannelRepository;
@@ -13,11 +14,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -40,7 +44,11 @@ public class NotificationChannelService {
         return notificationChannelRepository.findById(id);
     }
 
-    public NotificationChannel create(String name, NotificationChannelType type, String configuration) {
+    /**
+     * @param activityFeed kinds of team activity to post to this channel (null or empty = none)
+     */
+    public NotificationChannel create(String name, NotificationChannelType type, String configuration,
+                                       Set<ActivityCategory> activityFeed) {
         validateConfiguration(parseConfig(configuration));
 
         NotificationChannel channel = new NotificationChannel();
@@ -48,13 +56,19 @@ public class NotificationChannelService {
         channel.setType(type);
         channel.setConfiguration(configuration);
         channel.setEnabled(true);
+        channel.setActivityFeed(copyOf(activityFeed));
         NotificationChannel saved = notificationChannelRepository.save(channel);
-        activityLogService.record(ActivityAction.CHANNEL_CREATED, saved.getName(), saved.getType().name());
+        activityLogService.record(ActivityAction.CHANNEL_CREATED, saved.getName(),
+                saved.getType().name() + describeFeed(saved));
         return saved;
     }
 
+    /**
+     * @param activityFeed kinds of team activity to post to this channel; null = leave as it is
+     */
     public NotificationChannel update(UUID id, String name, NotificationChannelType type,
-                                       String configuration, boolean enabled) {
+                                       String configuration, boolean enabled,
+                                       Set<ActivityCategory> activityFeed) {
         NotificationChannel channel = notificationChannelRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Notification channel not found: " + id));
 
@@ -71,8 +85,12 @@ public class NotificationChannelService {
         channel.setType(type);
         channel.setConfiguration(toJson(newConfig));
         channel.setEnabled(enabled);
+        if (activityFeed != null) {
+            channel.setActivityFeed(copyOf(activityFeed));
+        }
         NotificationChannel saved = notificationChannelRepository.save(channel);
-        activityLogService.record(ActivityAction.CHANNEL_UPDATED, saved.getName(), enabled ? "enabled" : "disabled");
+        activityLogService.record(ActivityAction.CHANNEL_UPDATED, saved.getName(),
+                (enabled ? "enabled" : "disabled") + describeFeed(saved));
         return saved;
     }
 
@@ -113,6 +131,24 @@ public class NotificationChannelService {
     }
 
     // --- Helpers ---
+
+    private static Set<ActivityCategory> copyOf(Set<ActivityCategory> categories) {
+        return categories == null || categories.isEmpty()
+                ? EnumSet.noneOf(ActivityCategory.class)
+                : EnumSet.copyOf(categories);
+    }
+
+    /**
+     * For the activity log, e.g. ", team feed: replays, alerts" (empty when the channel follows nothing)
+     */
+    private static String describeFeed(NotificationChannel channel) {
+        if (channel.getActivityFeed().isEmpty()) {
+            return "";
+        }
+        return ", team feed: " + channel.getActivityFeed().stream()
+                .map(category -> category.name().toLowerCase())
+                .collect(Collectors.joining(", "));
+    }
 
     private void validateConfiguration(Map<String, String> config) {
         NotificationService.validateSlackWebhookUrl(config.get(WEBHOOK_URL));
