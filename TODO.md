@@ -29,11 +29,10 @@
 
 ---
 
-## v5.0 — Team Access
+## v5.0 — Team Access ✓
 
 - [x] Sign-in for the UI and API (session cookie for the browser, HTTP Basic for scripts, CSRF protection)
 - [x] Role-based access control (Viewer, Operator, Admin) enforced by the API
-- [ ] Single sign-on with the company identity provider (OpenID Connect)
 - [x] Audit log with the real user for every action (Activity page)
 - [x] Safe concurrent replays: a message being replayed by one person can't be sent again by another at the same time
 - [x] Reuse Kafka connections (consumer pool, one shared admin client): a DLQ page loads ~8x faster
@@ -43,10 +42,11 @@
 
 ---
 
-## v6.0 — Multi-Cluster & Advanced Kafka
+## v6.0 — Multi-Cluster & Single Sign-On
 
 - [ ] Multi-cluster support with cluster switching
 - [ ] Connection profiles (dev / staging / prod)
+- [ ] Single sign-on with the company identity provider (OpenID Connect)
 - [ ] Client certificate (mTLS), Kerberos and OAuth logins
 
 ---

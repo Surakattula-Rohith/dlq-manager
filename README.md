@@ -66,6 +66,15 @@ Made the tool behave correctly on real Kafka setups, not just demo data:
 - Slack webhook URLs are masked in the API and only `hooks.slack.com` addresses are accepted
 - Ports and credentials configurable through environment variables
 
+**v5.0 — Team Access**
+Turned a single-user tool into one a team can share on a server:
+- **Sign-in and roles** — viewer, operator and admin, enforced by the API; session cookie with CSRF protection for the browser, HTTP Basic for scripts
+- **Activity page** — every replay, alert action, sign-in and configuration change is recorded under the real user
+- **Safe concurrent replays** — when two people replay the same message at the same moment, only one replay is sent
+- **Faster under shared use** — Kafka connections are reused (a DLQ page loads about 8x faster) and one error-breakdown scan is shared by everyone viewing the topic
+- **Secured Kafka** — SASL login (PLAIN, SCRAM) and TLS with an optional company certificate; the Kafka password is stored encrypted and never sent back to the browser
+- **Team feed in Slack** — channels can follow replays, alert actions and setup changes as they happen
+
 ---
 
 ## Tech Stack
@@ -329,8 +338,8 @@ All other endpoints need a session (the web UI) or HTTP Basic credentials (scrip
 - [x] v3.0 — Dark mode
 - [x] v4.0 — Alerting with Slack notifications
 - [x] v4.1 — Production hardening (partitions, real-world headers, replay safety, alert fixes)
-- [ ] v5.0 — Authentication & RBAC
-- [ ] v6.0 — Multi-cluster support
+- [x] v5.0 — Team access (sign-in and roles, activity log, safe concurrent replays, secured Kafka, Slack team feed)
+- [ ] v6.0 — Multi-cluster support and single sign-on
 
 See [TODO.md](TODO.md) for the full backlog.
 
