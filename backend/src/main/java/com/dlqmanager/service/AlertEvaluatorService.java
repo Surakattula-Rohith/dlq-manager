@@ -3,11 +3,13 @@ package com.dlqmanager.service;
 import com.dlqmanager.model.entity.AlertEvent;
 import com.dlqmanager.model.entity.AlertRule;
 import com.dlqmanager.model.entity.DlqCountSample;
+import com.dlqmanager.model.entity.DlqTopic;
 import com.dlqmanager.model.enums.AlertStatus;
 import com.dlqmanager.model.enums.AlertType;
 import com.dlqmanager.repository.AlertEventRepository;
 import com.dlqmanager.repository.AlertRuleRepository;
 import com.dlqmanager.repository.DlqCountSampleRepository;
+import com.dlqmanager.repository.DlqTopicRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -16,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -26,7 +30,8 @@ import java.util.UUID;
  *
  * Runs every 60 seconds:
  * 1. Ends snoozes whose time is up (alert goes back to FIRING)
- * 2. Takes one count sample per DLQ topic that has an enabled rule
+ * 2. Takes one count sample per active DLQ topic, and per topic an enabled rule watches
+ *    (used by time-window rules and by the trend chart on each DLQ page)
  * 3. Evaluates each enabled rule
  *    - THRESHOLD:   pending messages >= threshold
  *                   (pending = not replayed yet, so replaying the DLQ clears the alert)
@@ -47,6 +52,7 @@ public class AlertEvaluatorService {
     private final DlqCountSampleRepository dlqCountSampleRepository;
     private final DlqBrowserService dlqBrowserService;
     private final NotificationService notificationService;
+    private final DlqTopicRepository dlqTopicRepository;
 
     @Scheduled(fixedRate = 60_000) // every 60 seconds
     @Transactional
@@ -56,10 +62,10 @@ public class AlertEvaluatorService {
         endExpiredSnoozes(now);
 
         List<AlertRule> rules = alertRuleRepository.findByEnabledTrue();
+        Map<UUID, DlqBrowserService.MessageCounts> countsByTopic = sampleTopics(topicsToSample(rules), now);
+
         if (!rules.isEmpty()) {
             log.debug("Evaluating {} alert rule(s)", rules.size());
-
-            Map<UUID, DlqBrowserService.MessageCounts> countsByTopic = sampleTopics(rules, now);
 
             for (AlertRule rule : rules) {
                 try {
@@ -94,17 +100,31 @@ public class AlertEvaluatorService {
     }
 
     /**
-     * Read counts once per topic (several rules can watch the same topic)
-     * and store a sample for time-window rules.
+     * Every active DLQ topic (for the trend chart), plus any topic an enabled rule watches
+     * (a rule can point at a paused topic). Each topic once, however many rules watch it.
      */
-    private Map<UUID, DlqBrowserService.MessageCounts> sampleTopics(List<AlertRule> rules, LocalDateTime now) {
+    private Collection<DlqTopic> topicsToSample(List<AlertRule> rules) {
+        Map<UUID, DlqTopic> topics = new LinkedHashMap<>();
+        for (DlqTopic topic : dlqTopicRepository.findAllActive()) {
+            topics.put(topic.getId(), topic);
+        }
+        for (AlertRule rule : rules) {
+            topics.putIfAbsent(rule.getDlqTopic().getId(), rule.getDlqTopic());
+        }
+        return topics.values();
+    }
+
+    /**
+     * Read counts once per topic and store a sample.
+     *
+     * If Kafka doesn't answer, the rest of the topics are skipped until the next minute:
+     * each would wait for the same timeout and hold up the alerts that do work.
+     */
+    private Map<UUID, DlqBrowserService.MessageCounts> sampleTopics(Collection<DlqTopic> topics, LocalDateTime now) {
         Map<UUID, DlqBrowserService.MessageCounts> countsByTopic = new HashMap<>();
 
-        for (AlertRule rule : rules) {
-            UUID topicId = rule.getDlqTopic().getId();
-            if (countsByTopic.containsKey(topicId)) {
-                continue;
-            }
+        for (DlqTopic topic : topics) {
+            UUID topicId = topic.getId();
             try {
                 DlqBrowserService.MessageCounts counts = dlqBrowserService.getMessageCounts(topicId);
                 countsByTopic.put(topicId, counts);
@@ -117,12 +137,24 @@ public class AlertEvaluatorService {
                 dlqCountSampleRepository.save(sample);
 
             } catch (Exception e) {
-                log.warn("Could not get message count for topic '{}': {}",
-                        rule.getDlqTopic().getDlqTopicName(), e.getMessage());
+                log.warn("Could not get message count for topic '{}': {}", topic.getDlqTopicName(), e.getMessage());
+                if (isKafkaTimeout(e)) {
+                    log.warn("Kafka is not answering - skipping the other topics until the next check");
+                    break;
+                }
             }
         }
 
         return countsByTopic;
+    }
+
+    private static boolean isKafkaTimeout(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof org.apache.kafka.common.errors.TimeoutException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void evaluateRule(AlertRule rule, DlqBrowserService.MessageCounts counts, LocalDateTime now) {

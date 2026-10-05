@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,6 +21,18 @@ public interface DlqCountSampleRepository extends JpaRepository<DlqCountSample, 
      */
     Optional<DlqCountSample> findFirstByDlqTopicIdAndSampledAtGreaterThanEqualOrderBySampledAtAsc(
             UUID dlqTopicId, LocalDateTime from);
+
+    /**
+     * All samples for a topic from the given time on, oldest first (trend chart)
+     */
+    List<DlqCountSample> findByDlqTopicIdAndSampledAtGreaterThanEqualOrderBySampledAtAsc(
+            UUID dlqTopicId, LocalDateTime from);
+
+    /**
+     * Newest sample for a topic taken before the given time (trend chart: where the range starts from)
+     */
+    Optional<DlqCountSample> findFirstByDlqTopicIdAndSampledAtBeforeOrderBySampledAtDesc(
+            UUID dlqTopicId, LocalDateTime before);
 
     /**
      * Remove old samples so the table doesn't grow forever

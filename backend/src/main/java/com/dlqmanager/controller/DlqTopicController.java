@@ -6,8 +6,10 @@ import com.dlqmanager.model.dto.ErrorBreakdownDto;
 import com.dlqmanager.model.dto.RegisterDlqRequest;
 import com.dlqmanager.model.dto.UpdateDlqRequest;
 import com.dlqmanager.model.entity.DlqTopic;
+import com.dlqmanager.model.enums.TrendRange;
 import com.dlqmanager.service.DlqBrowserService;
 import com.dlqmanager.service.DlqDiscoveryService;
+import com.dlqmanager.service.DlqTrendService;
 import com.dlqmanager.service.MessageExportWriter;
 import com.dlqmanager.service.MessageFilter;
 import jakarta.validation.Valid;
@@ -29,6 +31,7 @@ import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -48,6 +51,7 @@ public class DlqTopicController {
     private final DlqDiscoveryService dlqDiscoveryService;
     private final DlqBrowserService dlqBrowserService;
     private final MessageExportWriter messageExportWriter;
+    private final DlqTrendService dlqTrendService;
 
     /**
      * List all registered DLQ topics
@@ -521,6 +525,47 @@ public class DlqTopicController {
             log.error("Failed to get error breakdown for DLQ topic: {}", id, e);
             return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Failed to get error breakdown: " + e.getMessage());
+        }
+    }
+
+    /**
+     * How a DLQ developed over time (trend chart)
+     *
+     * GET /api/dlq-topics/{id}/trend?range=24h   (24 hourly points)
+     * GET /api/dlq-topics/{id}/trend?range=7d    (28 points, one per 6 hours)
+     *
+     * Each point: time (start, UTC), pending (waiting at the end of it) and newMessages
+     * (arrived during it). Both are null where no history exists yet.
+     */
+    @GetMapping("/{id}/trend")
+    public ResponseEntity<Map<String, Object>> getTrend(@PathVariable UUID id,
+                                                        @RequestParam(defaultValue = "24h") String range) {
+        Optional<TrendRange> trendRange = TrendRange.fromCode(range);
+        if (trendRange.isEmpty()) {
+            return createErrorResponse(HttpStatus.BAD_REQUEST, "range must be 24h or 7d");
+        }
+
+        try {
+            List<Map<String, Object>> points = dlqTrendService.getTrend(id, trendRange.get()).stream()
+                    .map(point -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        // The app runs in UTC (see DlqManagerApplication); the browser shows local time
+                        m.put("time", point.start().toInstant(ZoneOffset.UTC).toString());
+                        m.put("pending", point.pending());
+                        m.put("newMessages", point.newMessages());
+                        return m;
+                    })
+                    .toList();
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("range", trendRange.get().code());
+            response.put("bucketMinutes", trendRange.get().bucketMinutes());
+            response.put("points", points);
+            return ResponseEntity.ok(response);
+
+        } catch (IllegalArgumentException e) {
+            return createErrorResponse(HttpStatus.NOT_FOUND, e.getMessage());
         }
     }
 

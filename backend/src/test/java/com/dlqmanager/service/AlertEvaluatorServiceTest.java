@@ -10,6 +10,8 @@ import com.dlqmanager.model.enums.AlertType;
 import com.dlqmanager.repository.AlertEventRepository;
 import com.dlqmanager.repository.AlertRuleRepository;
 import com.dlqmanager.repository.DlqCountSampleRepository;
+import com.dlqmanager.repository.DlqTopicRepository;
+import org.apache.kafka.common.errors.TimeoutException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +47,8 @@ class AlertEvaluatorServiceTest {
     private DlqBrowserService dlqBrowserService;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private DlqTopicRepository dlqTopicRepository;
 
     @InjectMocks
     private AlertEvaluatorService alertEvaluatorService;
@@ -195,7 +199,74 @@ class AlertEvaluatorServiceTest {
         verify(dlqCountSampleRepository, times(1)).save(any(DlqCountSample.class));
     }
 
+    // --- Sampling for the trend chart ---
+
+    @Test
+    void everyActiveTopicIsSampledEvenWithoutAlertRules() {
+        DlqTopic payments = topic("payments-dlq");
+        when(dlqTopicRepository.findAllActive()).thenReturn(List.of(topic, payments));
+        givenCounts(56, 0, 58);
+        when(dlqBrowserService.getMessageCounts(payments.getId()))
+                .thenReturn(new DlqBrowserService.MessageCounts(5, 0, 5, 7));
+
+        alertEvaluatorService.evaluateAlerts();
+
+        ArgumentCaptor<DlqCountSample> captor = ArgumentCaptor.forClass(DlqCountSample.class);
+        verify(dlqCountSampleRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues()).extracting(DlqCountSample::getDlqTopicId)
+                .containsExactly(topic.getId(), payments.getId());
+        verify(alertEventRepository, never()).save(any());
+    }
+
+    @Test
+    void aTopicThatIsActiveAndWatchedByARuleIsReadOnce() {
+        when(dlqTopicRepository.findAllActive()).thenReturn(List.of(topic));
+        givenRules(thresholdRule(40));
+        givenCounts(56, 0, 58);
+
+        alertEvaluatorService.evaluateAlerts();
+
+        verify(dlqBrowserService, times(1)).getMessageCounts(topic.getId());
+        assertThat(savedEvent().getStatus()).isEqualTo(AlertStatus.FIRING);
+    }
+
+    @Test
+    void whenKafkaDoesNotAnswerTheOtherTopicsWaitForTheNextCheck() {
+        DlqTopic payments = topic("payments-dlq");
+        DlqTopic invoices = topic("invoices-dlq");
+        when(dlqTopicRepository.findAllActive()).thenReturn(List.of(topic, payments, invoices));
+        when(dlqBrowserService.getMessageCounts(topic.getId()))
+                .thenThrow(new RuntimeException("Failed to get message count",
+                        new TimeoutException("Timeout expired while fetching topic metadata")));
+
+        alertEvaluatorService.evaluateAlerts();
+
+        verify(dlqBrowserService, never()).getMessageCounts(payments.getId());
+        verify(dlqBrowserService, never()).getMessageCounts(invoices.getId());
+    }
+
+    @Test
+    void oneTopicFailingForAnotherReasonDoesNotStopTheRest() {
+        DlqTopic payments = topic("payments-dlq");
+        when(dlqTopicRepository.findAllActive()).thenReturn(List.of(topic, payments));
+        when(dlqBrowserService.getMessageCounts(topic.getId()))
+                .thenThrow(new RuntimeException("Not authorized to access topics: [orders-dlq]"));
+        when(dlqBrowserService.getMessageCounts(payments.getId()))
+                .thenReturn(new DlqBrowserService.MessageCounts(5, 0, 5, 7));
+
+        alertEvaluatorService.evaluateAlerts();
+
+        verify(dlqCountSampleRepository, times(1)).save(any(DlqCountSample.class));
+    }
+
     // --- Helpers ---
+
+    private static DlqTopic topic(String name) {
+        DlqTopic other = new DlqTopic();
+        other.setId(UUID.randomUUID());
+        other.setDlqTopicName(name);
+        return other;
+    }
 
     private AlertRule thresholdRule(long threshold) {
         AlertRule rule = new AlertRule();
