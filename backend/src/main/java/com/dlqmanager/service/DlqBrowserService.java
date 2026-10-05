@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.OffsetAndTimestamp;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.stereotype.Service;
@@ -99,6 +100,8 @@ public class DlqBrowserService {
      * Unlike getMessages, we can't jump to a page: Kafka can't filter by content,
      * so every message is read (up to MAX_SCAN_MESSAGES) and checked against the filter.
      * Only the messages on the requested page are converted to DTOs.
+     * A "from" time is the exception: Kafka can find the first message at or after a time,
+     * so everything older is skipped without being read.
      *
      * @param dlqTopicId UUID of the DLQ topic
      * @param filter     what to look for
@@ -148,6 +151,11 @@ public class DlqBrowserService {
     /**
      * Read every message of a topic (up to MAX_SCAN_MESSAGES) and pass the ones matching the filter on
      *
+     * With a "from" time the read starts at the first message at or after it (see startOffsets).
+     * It still runs to the end of each partition even when a "to" time is set: timestamps are
+     * set by whoever wrote the message (Spring's dead-letter publisher keeps the original
+     * record's time, for example), so a message inside the window can sit after newer ones.
+     *
      * @return true if the scan stopped at MAX_SCAN_MESSAGES
      */
     private boolean scanMatching(DlqTopic dlqTopic, MessageFilter filter, Map<String, LocalDateTime> replayedOffsets,
@@ -160,8 +168,8 @@ public class DlqBrowserService {
         try (KafkaConsumerPool.Lease lease = consumerPool.borrow()) {
             KafkaConsumer<String, String> consumer = lease.consumer();
             List<TopicPartition> partitions = getPartitions(consumer, topicName);
-            Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
             Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
+            Map<TopicPartition, Long> startOffsets = startOffsets(consumer, partitions, endOffsets, filter);
 
             for (TopicPartition partition : partitions) {
                 long remaining = MAX_SCAN_MESSAGES - scanned[0];
@@ -169,7 +177,7 @@ public class DlqBrowserService {
                     break;
                 }
 
-                long begin = beginningOffsets.getOrDefault(partition, 0L);
+                long begin = startOffsets.getOrDefault(partition, 0L);
                 long end = endOffsets.getOrDefault(partition, 0L);
 
                 readRange(consumer, partition, begin, end, remaining, record -> {
@@ -199,6 +207,36 @@ public class DlqBrowserService {
         log.info("Scanned {} messages in {}, {} matched", scanned[0], topicName, matched[0]);
 
         return scanLimitReached;
+    }
+
+    /**
+     * Where to start reading each partition
+     *
+     * Without a "from" time: the first message Kafka still has.
+     * With one: Kafka's time index gives the first offset whose timestamp is at or after it -
+     * every earlier offset is older than "from", so nothing in the window is skipped.
+     * A partition with no message that recent starts at its end (nothing to read).
+     */
+    private Map<TopicPartition, Long> startOffsets(KafkaConsumer<String, String> consumer,
+                                                   List<TopicPartition> partitions,
+                                                   Map<TopicPartition, Long> endOffsets,
+                                                   MessageFilter filter) {
+        if (filter.from() == null) {
+            return consumer.beginningOffsets(partitions);
+        }
+
+        Map<TopicPartition, Long> fromTime = new HashMap<>();
+        for (TopicPartition partition : partitions) {
+            fromTime.put(partition, filter.from().toEpochMilli());
+        }
+        Map<TopicPartition, OffsetAndTimestamp> firstAtOrAfter = consumer.offsetsForTimes(fromTime);
+
+        Map<TopicPartition, Long> startOffsets = new HashMap<>();
+        for (TopicPartition partition : partitions) {
+            OffsetAndTimestamp found = firstAtOrAfter.get(partition);
+            startOffsets.put(partition, found != null ? found.offset() : endOffsets.getOrDefault(partition, 0L));
+        }
+        return startOffsets;
     }
 
     private DlqMessageDto toDto(ConsumerRecord<String, String> record, DlqTopic dlqTopic,

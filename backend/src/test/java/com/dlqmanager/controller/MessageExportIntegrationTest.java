@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
@@ -76,6 +77,50 @@ class MessageExportIntegrationTest extends IntegrationTestBase {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void listAndExportShareTheTimeWindow() throws Exception {
+        String dlq = uniqueTopic("orders-dlq");
+        createTopic(dlq, 1);
+        Instant noon = Instant.parse("2026-10-05T12:00:00Z");
+        produceAt(dlq, 0, "before", noon.minusSeconds(7200), Map.of("X-Error-Message", "DB Connection Timeout"));
+        produceAt(dlq, 0, "during-1", noon.plusSeconds(300), Map.of("X-Error-Message", "DB Connection Timeout"));
+        produceAt(dlq, 0, "during-2", noon.plusSeconds(900), Map.of("X-Error-Message", "DB Connection Timeout"));
+        produceAt(dlq, 0, "after", noon.plusSeconds(7200), Map.of("X-Error-Message", "DB Connection Timeout"));
+        UUID id = register(dlq);
+        String window = "from=2026-10-05T12:00:00Z&to=2026-10-05T13:00:00Z";
+
+        String list = mockMvc.perform(get("/api/dlq-topics/" + id + "/messages?" + window))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode page = objectMapper.readTree(list);
+        assertThat(page.get("pagination").get("filtered").asBoolean()).isTrue();
+        assertThat(page.get("pagination").get("matchingMessages").asLong()).isEqualTo(2);
+        assertThat(page.get("pagination").get("totalMessages").asLong()).isEqualTo(4);
+        assertThat(page.get("messages")).extracting(message -> message.get("messageKey").asText())
+                .containsExactly("during-1", "during-2");
+
+        String csv = download("/api/dlq-topics/" + id + "/messages/export?format=csv&" + window, "text/csv");
+        String[] lines = csv.split("\r\n");
+        assertThat(lines).hasSize(1 + 2);
+        assertThat(lines[1]).contains("during-1");
+        assertThat(lines[2]).contains("during-2");
+    }
+
+    @Test
+    void timeWindowThatMakesNoSenseIsRejected() throws Exception {
+        UUID id = topicWithMessages();
+
+        String notATime = mockMvc.perform(get("/api/dlq-topics/" + id + "/messages?from=yesterday"))
+                .andExpect(status().isBadRequest())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(notATime).contains("from must be a time like");
+
+        mockMvc.perform(get("/api/dlq-topics/" + id + "/messages?from=2026-10-05T13:00:00Z&to=2026-10-05T12:00:00Z"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/dlq-topics/" + id + "/messages/export?to=noon"))
+                .andExpect(status().isBadRequest());
+    }
+
     private String download(String url, String expectedType) throws Exception {
         MvcResult started = mockMvc.perform(get(url))
                 .andExpect(request().asyncStarted())
@@ -95,7 +140,10 @@ class MessageExportIntegrationTest extends IntegrationTestBase {
         createTopic(dlq, 1);
         produce(dlq, 0, 3, Map.of("X-Error-Message", "DB Connection Timeout"));
         produce(dlq, 0, 2, Map.of("X-Error-Message", "Validation Failed"));
+        return register(dlq);
+    }
 
+    private UUID register(String dlq) {
         DlqTopic topic = new DlqTopic();
         topic.setDlqTopicName(dlq);
         topic.setSourceTopic("orders");

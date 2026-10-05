@@ -31,9 +31,11 @@ import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -256,6 +258,7 @@ public class DlqTopicController {
      * Browse messages from a DLQ topic with pagination, optionally filtered
      *
      * GET /api/dlq-topics/{id}/messages?page=1&size=10&search=ORD-1&errorType=DB%20Connection%20Timeout&pendingOnly=true
+     * GET /api/dlq-topics/{id}/messages?from=2026-10-05T05:30:00Z&to=2026-10-05T07:00:00Z
      *
      * Purpose: Fetch messages from the DLQ for viewing
      *
@@ -265,6 +268,8 @@ public class DlqTopicController {
      * - search: Optional text to find in the key, payload or headers (case-insensitive)
      * - errorType: Optional exact error type from the error breakdown
      * - pendingOnly: Optional, true hides messages that were already replayed
+     * - from / to: Optional time window (ISO-8601, e.g. 2026-10-05T05:30:00Z) on when the
+     *   message landed in the DLQ; from is included, to is not
      *
      * @param id The UUID of the DLQ topic
      * @param page Page number (optional, default 1)
@@ -278,7 +283,9 @@ public class DlqTopicController {
         @RequestParam(defaultValue = "10") int size,
         @RequestParam(required = false) String search,
         @RequestParam(required = false) String errorType,
-        @RequestParam(defaultValue = "false") boolean pendingOnly
+        @RequestParam(defaultValue = "false") boolean pendingOnly,
+        @RequestParam(required = false) String from,
+        @RequestParam(required = false) String to
     ) {
         log.info("API: GET /api/dlq-topics/{}/messages?page={}&size={}", id, page, size);
 
@@ -293,9 +300,14 @@ public class DlqTopicController {
             return createErrorResponse(HttpStatus.BAD_REQUEST, "Search text must be at most 200 characters");
         }
 
+        MessageFilter filter;
         try {
-            MessageFilter filter = new MessageFilter(search, errorType, pendingOnly);
+            filter = messageFilter(search, errorType, pendingOnly, from, to);
+        } catch (IllegalArgumentException e) {
+            return createErrorResponse(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
 
+        try {
             // Get counts for pagination metadata
             // total = everything stored in Kafka (all browsable), pending = not yet replayed
             DlqBrowserService.MessageCounts counts = dlqBrowserService.getMessageCounts(id);
@@ -354,7 +366,7 @@ public class DlqTopicController {
     /**
      * Download messages as CSV or JSON
      *
-     * GET /api/dlq-topics/{id}/messages/export?format=csv&search=...&errorType=...&pendingOnly=true
+     * GET /api/dlq-topics/{id}/messages/export?format=csv&search=...&errorType=...&pendingOnly=true&from=...&to=...
      *
      * Takes the same filters as the message browser, so the download contains exactly
      * what is on screen (all pages, not just the current one). Messages are streamed
@@ -370,7 +382,9 @@ public class DlqTopicController {
         @RequestParam(defaultValue = "csv") String format,
         @RequestParam(required = false) String search,
         @RequestParam(required = false) String errorType,
-        @RequestParam(defaultValue = "false") boolean pendingOnly
+        @RequestParam(defaultValue = "false") boolean pendingOnly,
+        @RequestParam(required = false) String from,
+        @RequestParam(required = false) String to
     ) {
         log.info("API: GET /api/dlq-topics/{}/messages/export?format={}", id, format);
 
@@ -388,7 +402,12 @@ public class DlqTopicController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
         }
 
-        MessageFilter filter = new MessageFilter(search, errorType, pendingOnly);
+        MessageFilter filter;
+        try {
+            filter = messageFilter(search, errorType, pendingOnly, from, to);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
         String fileName = dlqTopic.getDlqTopicName() + "-" + EXPORT_TIMESTAMP.format(LocalDateTime.now())
                 + (csv ? ".csv" : ".json");
 
@@ -527,6 +546,32 @@ public class DlqTopicController {
             log.error("Failed to get error breakdown for DLQ topic: {}", id, e);
             return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Failed to get error breakdown: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Build the filter shared by the message browser and the export
+     *
+     * @throws IllegalArgumentException if from/to are not valid times or are the wrong way round
+     */
+    private static MessageFilter messageFilter(String search, String errorType, boolean pendingOnly,
+                                               String from, String to) {
+        Instant fromTime = parseTime("from", from);
+        Instant toTime = parseTime("to", to);
+        if (fromTime != null && toTime != null && !fromTime.isBefore(toTime)) {
+            throw new IllegalArgumentException("from must be earlier than to");
+        }
+        return new MessageFilter(search, errorType, pendingOnly, fromTime, toTime);
+    }
+
+    private static Instant parseTime(String name, String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Instant.parse(value.trim());
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException(name + " must be a time like 2026-10-05T05:30:00Z");
         }
     }
 

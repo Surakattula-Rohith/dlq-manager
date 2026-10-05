@@ -2,6 +2,7 @@ package com.dlqmanager.service;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
+import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
 
@@ -11,8 +12,17 @@ import java.util.Map;
  * @param search      free text, matched (case-insensitive) against the message key, payload and header values
  * @param errorType   exact error type, as shown in the error breakdown (e.g. "DB Connection Timeout")
  * @param pendingOnly true to hide messages that were already replayed
+ * @param from        only messages that landed in the DLQ at or after this time (null = no lower limit)
+ * @param to          only messages that landed in the DLQ before this time (null = no upper limit)
  */
-public record MessageFilter(String search, String errorType, boolean pendingOnly) {
+public record MessageFilter(String search, String errorType, boolean pendingOnly, Instant from, Instant to) {
+
+    /**
+     * A filter without a time window
+     */
+    public MessageFilter(String search, String errorType, boolean pendingOnly) {
+        this(search, errorType, pendingOnly, null, null);
+    }
 
     public static MessageFilter none() {
         return new MessageFilter(null, null, false);
@@ -23,7 +33,15 @@ public record MessageFilter(String search, String errorType, boolean pendingOnly
      * with filters every message has to be checked.
      */
     public boolean isActive() {
-        return hasText(search) || hasText(errorType) || pendingOnly;
+        return hasText(search) || hasText(errorType) || pendingOnly || from != null || to != null;
+    }
+
+    /**
+     * The time a message landed in the DLQ is its Kafka timestamp (the Timestamp column in the browser)
+     */
+    public boolean inTimeWindow(long timestampMillis) {
+        return (from == null || timestampMillis >= from.toEpochMilli())
+                && (to == null || timestampMillis < to.toEpochMilli());
     }
 
     /**
@@ -35,6 +53,9 @@ public record MessageFilter(String search, String errorType, boolean pendingOnly
     public boolean matches(ConsumerRecord<String, String> record, Map<String, String> headers,
                            String resolvedErrorType, boolean replayed) {
         if (pendingOnly && replayed) {
+            return false;
+        }
+        if (!inTimeWindow(record.timestamp())) {
             return false;
         }
         if (hasText(errorType) && !errorType.equals(resolvedErrorType)) {

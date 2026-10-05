@@ -13,6 +13,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -130,6 +131,44 @@ class DlqBrowserIntegrationTest extends IntegrationTestBase {
 
         assertThat(byKey.matching()).isEqualTo(4);
         assertThat(byKey.messages()).allMatch(m -> m.getPartition() == 1);
+    }
+
+    @Test
+    void timeWindowFindsExactlyTheMessagesThatLandedInIt() throws Exception {
+        String dlq = uniqueTopic("orders-dlq");
+        createTopic(dlq, 2);
+        Instant noon = Instant.parse("2026-10-05T12:00:00Z");
+        // Partition 0, written in time order
+        produceAt(dlq, 0, "early", noon.minusSeconds(3 * 3600), Map.of("X-Error-Message", "DB Connection Timeout"));
+        produceAt(dlq, 0, "in-window-1", noon.plusSeconds(60), Map.of("X-Error-Message", "DB Connection Timeout"));
+        produceAt(dlq, 0, "in-window-2", noon.plusSeconds(1800), Map.of("X-Error-Message", "Validation Failed"));
+        produceAt(dlq, 0, "late", noon.plusSeconds(2 * 3600), Map.of("X-Error-Message", "DB Connection Timeout"));
+        // A publisher that keeps the original record's time: written last, but it belongs in the window
+        produceAt(dlq, 0, "in-window-out-of-order", noon.plusSeconds(600), Map.of("X-Error-Message", "DB Connection Timeout"));
+        // Partition 1 has nothing that recent
+        produceAt(dlq, 1, "yesterday", noon.minusSeconds(86_400), Map.of());
+        UUID id = register(dlq);
+
+        MessageFilter window = new MessageFilter(null, null, false, noon, noon.plusSeconds(3600));
+        DlqBrowserService.SearchResult inWindow = dlqBrowserService.searchMessages(id, window, 1, 10);
+
+        assertThat(inWindow.matching()).isEqualTo(3);
+        assertThat(inWindow.messages()).extracting(DlqMessageDto::getMessageKey)
+                .containsExactly("in-window-1", "in-window-2", "in-window-out-of-order");
+
+        // Combined with an error type
+        MessageFilter timeouts = new MessageFilter(null, "DB Connection Timeout", false, noon, noon.plusSeconds(3600));
+        assertThat(dlqBrowserService.searchMessages(id, timeouts, 1, 10).messages())
+                .extracting(DlqMessageDto::getMessageKey)
+                .containsExactly("in-window-1", "in-window-out-of-order");
+
+        // Open-ended: everything from noon on
+        MessageFilter sinceNoon = new MessageFilter(null, null, false, noon, null);
+        assertThat(dlqBrowserService.searchMessages(id, sinceNoon, 1, 10).matching()).isEqualTo(4);
+
+        // A window after the last message
+        MessageFilter future = new MessageFilter(null, null, false, noon.plusSeconds(86_400), null);
+        assertThat(dlqBrowserService.searchMessages(id, future, 1, 10).matching()).isZero();
     }
 
     private UUID register(String dlqTopicName) {

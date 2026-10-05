@@ -14,6 +14,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -59,6 +60,23 @@ public abstract class IntegrationTestBase {
         try (AdminClient admin = AdminClient.create(Map.of(
                 AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA.getBootstrapServers()))) {
             admin.createTopics(List.of(new NewTopic(name, partitions, (short) 1))).all().get();
+        }
+    }
+
+    /**
+     * Send one message that carries the given time as its Kafka timestamp
+     * (the time it "landed in the DLQ", whatever order it is written in)
+     */
+    protected static void produceAt(String topic, int partition, String key, Instant timestamp,
+                                    Map<String, String> headers) throws Exception {
+        try (KafkaProducer<String, String> producer = new KafkaProducer<>(Map.of(
+                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA.getBootstrapServers(),
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(),
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName()))) {
+            ProducerRecord<String, String> record = new ProducerRecord<>(
+                    topic, partition, timestamp.toEpochMilli(), key, "{\"orderId\":\"" + key + "\"}");
+            headers.forEach((name, value) -> record.headers().add(name, value.getBytes(StandardCharsets.UTF_8)));
+            producer.send(record).get();
         }
     }
 
