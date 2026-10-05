@@ -68,7 +68,7 @@
 ### Analytics
 - [x] Trend chart per DLQ: pending messages and new failures over the last 24 hours or 7 days
 - [ ] Real-time message count updates
-- [ ] Kafka consumer lag monitoring
+- [x] Consumer lag of the source topic on each DLQ page, with a warning before replaying into a stopped or lagging service
 
 ### Deployment
 - [x] Run the whole app with one `docker compose up` (backend + frontend images)

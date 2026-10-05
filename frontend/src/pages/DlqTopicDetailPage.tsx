@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Header } from '../components/layout';
 import { DlqTrendCard } from '../components/trend/DlqTrendCard';
+import { SourceConsumersCard } from '../components/consumers/SourceConsumersCard';
+import { replayWarning, useSourceConsumers } from '../hooks/useSourceConsumers';
 import { dlqTopicsApi } from '../api/dlqTopics';
 import { replayApi } from '../api/replay';
 import type { DlqMessage } from '../types';
@@ -39,6 +41,9 @@ export function DlqTopicDetailPage() {
   const [pendingOnly, setPendingOnly] = useState(false);
   const searchTimer = useRef<number | undefined>(undefined);
   const hasFilters = search !== '' || errorType !== null || pendingOnly;
+
+  // Who reads the source topic: checked before replaying, so nobody replays into a stopped service unawares
+  const { data: sourceConsumers } = useSourceConsumers(id);
 
   const { data: topic } = useQuery({
     queryKey: ['dlqTopic', id],
@@ -102,6 +107,7 @@ export function DlqTopicDetailPage() {
       setSelectedMessages(new Set());
       refetch();
       queryClient.invalidateQueries({ queryKey: ['replayHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['sourceConsumers', id] });
       showReplayNotice(data.message, data.replayJob.failed > 0);
     },
     onError: () => {
@@ -144,6 +150,11 @@ export function DlqTopicDetailPage() {
       return { partition, offset };
     });
 
+    const warning = replayWarning(sourceConsumers, messages.length);
+    if (warning && !window.confirm(`${warning}\n\nReplay anyway?`)) {
+      return;
+    }
+
     try {
       await replayMutation.mutateAsync({
         dlqTopicId: id,
@@ -155,6 +166,10 @@ export function DlqTopicDetailPage() {
   };
 
   const handleReplayFromModal = async (message: DlqMessage) => {
+    const warning = replayWarning(sourceConsumers, 1);
+    if (warning && !window.confirm(`${warning}\n\nReplay anyway?`)) {
+      return;
+    }
     if (message.replayed && !window.confirm(
       'This message was already replayed. Sending it again may process it twice in the source system. Replay anyway?'
     )) {
@@ -241,6 +256,9 @@ export function DlqTopicDetailPage() {
             </p>
           </div>
         )}
+
+        {/* Where replays go: the services reading the source topic */}
+        {id && <SourceConsumersCard dlqTopicId={id} />}
 
         {/* Replay result */}
         {replayNotice && (

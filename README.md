@@ -29,7 +29,7 @@ This project started as a weekend experiment and has grown into a full platform 
 
 - **Browse** failed messages across all your DLQ topics, paginated
 - **Analyze** error patterns with a per-topic error breakdown, and see whether a DLQ is growing or shrinking on a 24-hour / 7-day trend chart
-- **Replay** single or bulk messages back to the source topic
+- **Replay** single or bulk messages back to the source topic, and see first whether the services reading that topic are running and keeping up (consumer lag) — with a warning before replaying into one that isn't
 - **Track** every replay operation with a full audit trail
 - **Configure** Kafka connections from the UI — no restart needed, including clusters that need a login and encryption (SASL + TLS)
 - **Alert** when a DLQ crosses a threshold, with Slack notifications
@@ -226,6 +226,7 @@ CI runs the full backend suite plus frontend lint and build on every push.
 ![Message Browser with Error Breakdown](assets/04-topic-detail-error-breakdown.png)
 ![Trend: pending messages and new failures per hour](assets/33-topic-trend.png)
 ![Trend over 7 days (Dark)](assets/34-dark-topic-trend.png)
+![Where replays go: consumers of the source topic and their lag](assets/35-source-consumers.png)
 ![Filtered by error type, replayed messages hidden](assets/27-search-filter.png)
 ![Message Detail](assets/05-message-detail-modal.png)
 ![Message Browser Dark](assets/31-dark-topic-detail.png)
@@ -297,6 +298,7 @@ All other endpoints need a session (the web UI) or HTTP Basic credentials (scrip
 | `GET` | `/api/dlq-topics/{id}/messages/export` | Download messages as `format=csv` or `format=json` (same filters) |
 | `GET` | `/api/dlq-topics/{id}/error-breakdown` | Error type statistics |
 | `GET` | `/api/dlq-topics/{id}/trend` | Pending messages and new failures over time (`range=24h` or `7d`) |
+| `GET` | `/api/dlq-topics/{id}/source-consumers` | Consumer groups of the source topic: running or not, and their lag |
 
 ### Replay
 | Method | Endpoint | Description |

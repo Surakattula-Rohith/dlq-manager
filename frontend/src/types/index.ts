@@ -62,6 +62,23 @@ export interface DlqTrend {
   points: TrendPoint[];
 }
 
+// Consumer groups that read a DLQ's source topic (where replays go)
+export type ConsumerStatus = 'CAUGHT_UP' | 'BEHIND' | 'NOT_RUNNING' | 'REBALANCING';
+
+export interface SourceConsumer {
+  groupId: string;
+  state: string;    // Kafka's group state, e.g. STABLE or EMPTY
+  members: number;  // consumers running in the group
+  lag: number;      // messages not processed yet
+  status: ConsumerStatus;
+}
+
+export interface SourceConsumers {
+  sourceTopic: string;
+  topicExists: boolean;
+  consumers: SourceConsumer[]; // the ones needing attention first
+}
+
 export interface ErrorBreakdownItem {
   errorType: string;
   count: number;

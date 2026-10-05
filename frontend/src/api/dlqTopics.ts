@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { DlqTopic, MessagePage, ErrorBreakdown, MessageFilters, DlqTrend, TrendRangeCode } from '../types';
+import type { DlqTopic, MessagePage, ErrorBreakdown, MessageFilters, DlqTrend, TrendRangeCode, SourceConsumers } from '../types';
 
 export const dlqTopicsApi = {
   // Get all DLQ topics
@@ -84,6 +84,12 @@ export const dlqTopicsApi = {
   getTrend: async (id: string, range: TrendRangeCode): Promise<DlqTrend> => {
     const utcOffsetMinutes = -new Date().getTimezoneOffset();
     const response = await apiClient.get(`/api/dlq-topics/${id}/trend`, { params: { range, utcOffsetMinutes } });
+    return response.data;
+  },
+
+  // Who reads the source topic replays go to, and whether they keep up
+  getSourceConsumers: async (id: string): Promise<SourceConsumers> => {
+    const response = await apiClient.get(`/api/dlq-topics/${id}/source-consumers`);
     return response.data;
   },
 
