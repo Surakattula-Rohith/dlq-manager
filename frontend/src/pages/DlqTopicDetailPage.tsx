@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Header } from '../components/layout';
+import { DlqTrendCard } from '../components/trend/DlqTrendCard';
 import { dlqTopicsApi } from '../api/dlqTopics';
 import { replayApi } from '../api/replay';
 import type { DlqMessage } from '../types';
@@ -196,6 +197,9 @@ export function DlqTopicDetailPage() {
           <ArrowLeft className="w-4 h-4" />
           Back to DLQ Topics
         </Link>
+
+        {/* Trend: pending messages and new failures over time */}
+        {id && <DlqTrendCard dlqTopicId={id} />}
 
         {/* Error Breakdown */}
         {errorBreakdown && errorBreakdown.errorBreakdown.length > 0 && (

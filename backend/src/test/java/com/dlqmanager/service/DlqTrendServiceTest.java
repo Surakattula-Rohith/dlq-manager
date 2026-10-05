@@ -47,6 +47,21 @@ class DlqTrendServiceTest {
     }
 
     @Test
+    void pointsStartOnTheViewersWholeHours() {
+        // 14:37 UTC is 20:07 in India (UTC+5:30): the current hour there began at 20:00 = 14:30 UTC
+        when(topics.existsById(TOPIC)).thenReturn(true);
+        when(samples.findByDlqTopicIdAndSampledAtGreaterThanEqualOrderBySampledAtAsc(eq(TOPIC), any())).thenReturn(List.of());
+        when(samples.findFirstByDlqTopicIdAndSampledAtBeforeOrderBySampledAtDesc(eq(TOPIC), any())).thenReturn(Optional.empty());
+
+        List<DlqTrendService.TrendPoint> hourly = trendService.getTrend(TOPIC, TrendRange.LAST_24_HOURS, NOW, 330);
+        List<DlqTrendService.TrendPoint> sixHourly = trendService.getTrend(TOPIC, TrendRange.LAST_7_DAYS, NOW, 330);
+
+        assertThat(hourly.get(23).start()).isEqualTo(LocalDateTime.of(2026, 10, 5, 14, 30));
+        // 18:00 in India = 12:30 UTC
+        assertThat(sixHourly.get(27).start()).isEqualTo(LocalDateTime.of(2026, 10, 5, 12, 30));
+    }
+
+    @Test
     void pendingIsTheLastValueAndNewMessagesIsTheGrowthInEachHour() {
         List<DlqCountSample> history = List.of(
                 sample(12, 58, 39, 99),
@@ -123,7 +138,7 @@ class DlqTrendServiceTest {
     void unknownTopicIsReported() {
         when(topics.existsById(TOPIC)).thenReturn(false);
 
-        assertThatThrownBy(() -> trendService.getTrend(TOPIC, TrendRange.LAST_24_HOURS, NOW))
+        assertThatThrownBy(() -> trendService.getTrend(TOPIC, TrendRange.LAST_24_HOURS, NOW, 0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -141,7 +156,7 @@ class DlqTrendServiceTest {
                 .thenReturn(new ArrayList<>(history));
         when(samples.findFirstByDlqTopicIdAndSampledAtBeforeOrderBySampledAtDesc(eq(TOPIC), any()))
                 .thenReturn(Optional.ofNullable(before));
-        return trendService.getTrend(TOPIC, range, NOW);
+        return trendService.getTrend(TOPIC, range, NOW, 0);
     }
 
     /**

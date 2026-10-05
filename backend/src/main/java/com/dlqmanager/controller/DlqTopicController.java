@@ -533,20 +533,26 @@ public class DlqTopicController {
      *
      * GET /api/dlq-topics/{id}/trend?range=24h   (24 hourly points)
      * GET /api/dlq-topics/{id}/trend?range=7d    (28 points, one per 6 hours)
+     * Optional utcOffsetMinutes (e.g. 330 for India) lines the points up with the viewer's hours.
      *
      * Each point: time (start, UTC), pending (waiting at the end of it) and newMessages
      * (arrived during it). Both are null where no history exists yet.
      */
     @GetMapping("/{id}/trend")
     public ResponseEntity<Map<String, Object>> getTrend(@PathVariable UUID id,
-                                                        @RequestParam(defaultValue = "24h") String range) {
+                                                        @RequestParam(defaultValue = "24h") String range,
+                                                        @RequestParam(defaultValue = "0") int utcOffsetMinutes) {
         Optional<TrendRange> trendRange = TrendRange.fromCode(range);
         if (trendRange.isEmpty()) {
             return createErrorResponse(HttpStatus.BAD_REQUEST, "range must be 24h or 7d");
         }
+        // Real time zones are between UTC-12 and UTC+14
+        if (utcOffsetMinutes < -12 * 60 || utcOffsetMinutes > 14 * 60) {
+            return createErrorResponse(HttpStatus.BAD_REQUEST, "utcOffsetMinutes must be between -720 and 840");
+        }
 
         try {
-            List<Map<String, Object>> points = dlqTrendService.getTrend(id, trendRange.get()).stream()
+            List<Map<String, Object>> points = dlqTrendService.getTrend(id, trendRange.get(), utcOffsetMinutes).stream()
                     .map(point -> {
                         Map<String, Object> m = new LinkedHashMap<>();
                         // The app runs in UTC (see DlqManagerApplication); the browser shows local time

@@ -66,7 +66,7 @@
 - [ ] Dry-run mode (validate without sending)
 
 ### Analytics
-- [ ] Message trend charts over time
+- [x] Trend chart per DLQ: pending messages and new failures over the last 24 hours or 7 days
 - [ ] Real-time message count updates
 - [ ] Kafka consumer lag monitoring
 

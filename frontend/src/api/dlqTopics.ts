@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { DlqTopic, MessagePage, ErrorBreakdown, MessageFilters } from '../types';
+import type { DlqTopic, MessagePage, ErrorBreakdown, MessageFilters, DlqTrend, TrendRangeCode } from '../types';
 
 export const dlqTopicsApi = {
   // Get all DLQ topics
@@ -78,6 +78,13 @@ export const dlqTopicsApi = {
       ...data,
       uniqueErrorTypes: data.errorBreakdown?.length || 0,
     };
+  },
+
+  // How the DLQ developed over time, in points lined up with this browser's hours
+  getTrend: async (id: string, range: TrendRangeCode): Promise<DlqTrend> => {
+    const utcOffsetMinutes = -new Date().getTimezoneOffset();
+    const response = await apiClient.get(`/api/dlq-topics/${id}/trend`, { params: { range, utcOffsetMinutes } });
+    return response.data;
   },
 
   // Download link for the messages matching the filters (the browser handles the download)

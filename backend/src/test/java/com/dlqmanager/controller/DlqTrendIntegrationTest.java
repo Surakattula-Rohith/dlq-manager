@@ -66,6 +66,19 @@ class DlqTrendIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void pointsLineUpWithTheViewersHours() throws Exception {
+        UUID id = register(uniqueTopic("orders-dlq"));
+
+        String json = mockMvc.perform(get("/api/dlq-topics/" + id + "/trend?range=24h&utcOffsetMinutes=330")
+                        .with(httpBasic("viewer", "viewer")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+
+        // India is UTC+5:30, so its whole hours start at :30 UTC
+        assertThat(objectMapper.readTree(json).get("points").get(0).get("time").asText()).endsWith(":30:00Z");
+    }
+
+    @Test
     void sevenDaysHasTwentyEightPoints() throws Exception {
         UUID id = register(uniqueTopic("orders-dlq"));
 
@@ -80,6 +93,8 @@ class DlqTrendIntegrationTest extends IntegrationTestBase {
         UUID id = register(uniqueTopic("orders-dlq"));
 
         mockMvc.perform(get("/api/dlq-topics/" + id + "/trend?range=30d").with(httpBasic("viewer", "viewer")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/dlq-topics/" + id + "/trend?utcOffsetMinutes=9999").with(httpBasic("viewer", "viewer")))
                 .andExpect(status().isBadRequest());
         mockMvc.perform(get("/api/dlq-topics/" + UUID.randomUUID() + "/trend").with(httpBasic("viewer", "viewer")))
                 .andExpect(status().isNotFound());

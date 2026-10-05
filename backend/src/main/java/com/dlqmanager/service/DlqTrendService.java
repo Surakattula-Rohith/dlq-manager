@@ -20,7 +20,8 @@ import java.util.UUID;
  * Answers "is this DLQ getting better or worse?" from the samples the scheduler stores
  * every minute (pending count and end-offset sum, see AlertEvaluatorService).
  *
- * The range is cut into equal buckets aligned to the clock (whole hours, or 00/06/12/18h).
+ * The range is cut into equal buckets aligned to the viewer's clock (whole hours, or
+ * 00/06/12/18h in their time zone - in India a UTC hour would start at :30).
  * For each bucket:
  * - pending     = pending count at the last sample in the bucket
  * - newMessages = how much the end-offset sum grew during the bucket, i.e. how many
@@ -44,19 +45,23 @@ public class DlqTrendService {
     }
 
     /**
+     * @param utcOffsetMinutes the viewer's offset from UTC (e.g. 330 for India), so buckets
+     *                         start on their whole hours
      * @throws IllegalArgumentException if the DLQ topic doesn't exist
      */
-    public List<TrendPoint> getTrend(UUID dlqTopicId, TrendRange range) {
-        return getTrend(dlqTopicId, range, LocalDateTime.now());
+    public List<TrendPoint> getTrend(UUID dlqTopicId, TrendRange range, int utcOffsetMinutes) {
+        return getTrend(dlqTopicId, range, LocalDateTime.now(), utcOffsetMinutes);
     }
 
-    List<TrendPoint> getTrend(UUID dlqTopicId, TrendRange range, LocalDateTime now) {
+    List<TrendPoint> getTrend(UUID dlqTopicId, TrendRange range, LocalDateTime now, int utcOffsetMinutes) {
         if (!dlqTopicRepository.existsById(dlqTopicId)) {
             throw new IllegalArgumentException("DLQ topic not found: " + dlqTopicId);
         }
 
-        LocalDateTime firstBucket = bucketStart(now, range)
-                .minusMinutes((long) (range.buckets() - 1) * range.bucketMinutes());
+        // Align in the viewer's time, then go back to the app's time (UTC) to read the samples
+        LocalDateTime firstBucket = bucketStart(now.plusMinutes(utcOffsetMinutes), range)
+                .minusMinutes((long) (range.buckets() - 1) * range.bucketMinutes())
+                .minusMinutes(utcOffsetMinutes);
         List<DlqCountSample> samples = dlqCountSampleRepository
                 .findByDlqTopicIdAndSampledAtGreaterThanEqualOrderBySampledAtAsc(dlqTopicId, firstBucket);
 

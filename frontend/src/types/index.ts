@@ -47,6 +47,21 @@ export interface MessageFilters {
 }
 
 // Error breakdown types
+// Trend chart: one point per hour (24h) or per 6 hours (7d)
+export type TrendRangeCode = '24h' | '7d';
+
+export interface TrendPoint {
+  time: string;               // start of the period (ISO, UTC)
+  pending: number | null;     // messages waiting at the end of the period (null = no history yet)
+  newMessages: number | null; // messages that failed into the DLQ during the period
+}
+
+export interface DlqTrend {
+  range: TrendRangeCode;
+  bucketMinutes: number;
+  points: TrendPoint[];
+}
+
 export interface ErrorBreakdownItem {
   errorType: string;
   count: number;
