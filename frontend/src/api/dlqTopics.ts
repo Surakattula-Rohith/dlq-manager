@@ -40,6 +40,8 @@ export const dlqTopicsApi = {
         search: filters.search || undefined,
         errorType: filters.errorType || undefined,
         pendingOnly: filters.pendingOnly || undefined,
+        from: filters.from || undefined,
+        to: filters.to || undefined,
       },
     });
     // Transform backend response to match frontend types
@@ -99,6 +101,8 @@ export const dlqTopicsApi = {
     if (filters.search) params.set('search', filters.search);
     if (filters.errorType) params.set('errorType', filters.errorType);
     if (filters.pendingOnly) params.set('pendingOnly', 'true');
+    if (filters.from) params.set('from', filters.from);
+    if (filters.to) params.set('to', filters.to);
     return `${apiClient.defaults.baseURL ?? ''}/api/dlq-topics/${id}/messages/export?${params.toString()}`;
   },
 };

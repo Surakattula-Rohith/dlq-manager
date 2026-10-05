@@ -24,6 +24,40 @@ import {
   Download
 } from 'lucide-react';
 
+type TimePreset = 'any' | '1h' | '24h' | '7d' | 'custom';
+
+const TIME_PRESETS: { value: TimePreset; label: string; hours?: number }[] = [
+  { value: 'any', label: 'Any time' },
+  { value: '1h', label: 'Last hour', hours: 1 },
+  { value: '24h', label: 'Last 24 hours', hours: 24 },
+  { value: '7d', label: 'Last 7 days', hours: 24 * 7 },
+  { value: 'custom', label: 'Custom range...' },
+];
+
+const windowFormat = new Intl.DateTimeFormat(undefined, {
+  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+
+// "5 Oct, 11:00 – 5 Oct, 12:00", "since ..." or "before ..."
+function describeWindow(from: string | null, to: string | null): string {
+  if (from && to) return `${windowFormat.format(new Date(from))} – ${windowFormat.format(new Date(to))}`;
+  if (from) return `since ${windowFormat.format(new Date(from))}`;
+  return `before ${windowFormat.format(new Date(to!))}`;
+}
+
+// ISO time -> the value a datetime-local input wants (local time, no seconds)
+function toLocalInput(iso: string | null): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function fromLocalInput(value: string): string | null {
+  const date = new Date(value);
+  return value && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
+}
+
 export function DlqTopicDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -40,7 +74,17 @@ export function DlqTopicDetailPage() {
   const [errorType, setErrorType] = useState<string | null>(null);
   const [pendingOnly, setPendingOnly] = useState(false);
   const searchTimer = useRef<number | undefined>(undefined);
-  const hasFilters = search !== '' || errorType !== null || pendingOnly;
+  // Time window on when a message landed in the DLQ (ISO times; null = open on that side)
+  const [timePreset, setTimePreset] = useState<TimePreset>('any');
+  const [timeFrom, setTimeFrom] = useState<string | null>(null);
+  const [timeTo, setTimeTo] = useState<string | null>(null);
+  const timeWindowInvalid = !!timeFrom && !!timeTo && timeFrom >= timeTo;
+  // A window that makes no sense is not sent; the bar says what is wrong instead
+  const from = timeWindowInvalid ? undefined : timeFrom ?? undefined;
+  const to = timeWindowInvalid ? undefined : timeTo ?? undefined;
+  const hasTimeWindow = timeFrom !== null || timeTo !== null;
+  const hasFilters = search !== '' || errorType !== null || pendingOnly || hasTimeWindow;
+  const filtersRef = useRef<HTMLDivElement>(null);
 
   // Who reads the source topic: checked before replaying, so nobody replays into a stopped service unawares
   const { data: sourceConsumers } = useSourceConsumers(id);
@@ -52,11 +96,13 @@ export function DlqTopicDetailPage() {
   });
 
   const { data: messagesData, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ['dlqMessages', id, page, search, errorType, pendingOnly],
+    queryKey: ['dlqMessages', id, page, search, errorType, pendingOnly, from, to],
     queryFn: () => dlqTopicsApi.getMessages(id!, page, 10, {
       search,
       errorType: errorType ?? undefined,
       pendingOnly,
+      from,
+      to,
     }),
     enabled: !!id,
     // Keep showing the current page while the next one (or a new search) loads
@@ -80,6 +126,31 @@ export function DlqTopicDetailPage() {
     applyFilters(() => setErrorType(current => (current === type ? null : type)));
   };
 
+  const setTimeWindow = (preset: TimePreset, newFrom: string | null, newTo: string | null) => {
+    applyFilters(() => {
+      setTimePreset(preset);
+      setTimeFrom(newFrom);
+      setTimeTo(newTo);
+    });
+  };
+
+  const handleTimePresetChange = (preset: TimePreset) => {
+    const hours = TIME_PRESETS.find((p) => p.value === preset)?.hours;
+    if (hours) {
+      setTimeWindow(preset, new Date(Date.now() - hours * 3_600_000).toISOString(), null);
+    } else if (preset === 'custom') {
+      setTimeWindow('custom', timeFrom, timeTo); // keep what is set and show the two boxes
+    } else {
+      setTimeWindow('any', null, null);
+    }
+  };
+
+  // Clicking a period in the trend chart lists the messages that failed in it
+  const handleSelectPeriod = (periodFrom: Date, periodTo: Date) => {
+    setTimeWindow('custom', periodFrom.toISOString(), periodTo.toISOString());
+    filtersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const clearFilters = () => {
     window.clearTimeout(searchTimer.current);
     setSearchInput('');
@@ -87,6 +158,9 @@ export function DlqTopicDetailPage() {
       setSearch('');
       setErrorType(null);
       setPendingOnly(false);
+      setTimePreset('any');
+      setTimeFrom(null);
+      setTimeTo(null);
     });
   };
 
@@ -214,7 +288,7 @@ export function DlqTopicDetailPage() {
         </Link>
 
         {/* Trend: pending messages and new failures over time */}
-        {id && <DlqTrendCard dlqTopicId={id} />}
+        {id && <DlqTrendCard dlqTopicId={id} onSelectPeriod={handleSelectPeriod} />}
 
         {/* Error Breakdown */}
         {errorBreakdown && errorBreakdown.errorBreakdown.length > 0 && (
@@ -272,7 +346,7 @@ export function DlqTopicDetailPage() {
         )}
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div ref={filtersRef} className="flex flex-wrap items-center gap-3 mb-4 scroll-mt-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
             <input
@@ -293,6 +367,51 @@ export function DlqTopicDetailPage() {
             />
             Hide replayed
           </label>
+
+          {/* When the message landed in the DLQ */}
+          <select
+            value={timePreset}
+            onChange={(e) => handleTimePresetChange(e.target.value as TimePreset)}
+            aria-label="Filter by time"
+            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+          >
+            {TIME_PRESETS.map((preset) => (
+              <option key={preset.value} value={preset.value}>{preset.label}</option>
+            ))}
+          </select>
+
+          {timePreset === 'custom' && (
+            <span className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <input
+                type="datetime-local"
+                value={toLocalInput(timeFrom)}
+                onChange={(e) => setTimeWindow('custom', fromLocalInput(e.target.value), timeTo)}
+                aria-label="From"
+                className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
+              />
+              to
+              <input
+                type="datetime-local"
+                value={toLocalInput(timeTo)}
+                onChange={(e) => setTimeWindow('custom', timeFrom, fromLocalInput(e.target.value))}
+                aria-label="To"
+                className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
+              />
+            </span>
+          )}
+
+          {timeWindowInvalid && (
+            <span className="text-sm text-red-600 dark:text-red-400">The start must be before the end</span>
+          )}
+
+          {hasTimeWindow && !timeWindowInvalid && (
+            <span className="inline-flex items-center gap-1 px-3 py-1 text-sm rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">
+              Time: {describeWindow(timeFrom, timeTo)}
+              <button onClick={() => setTimeWindow('any', null, null)} title="Remove time filter">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </span>
+          )}
 
           {errorType && (
             <span className="inline-flex items-center gap-1 px-3 py-1 text-sm rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">
@@ -325,7 +444,7 @@ export function DlqTopicDetailPage() {
               {(['csv', 'json'] as const).map(format => (
                 <a
                   key={format}
-                  href={dlqTopicsApi.exportUrl(id, format, { search, errorType: errorType ?? undefined, pendingOnly })}
+                  href={dlqTopicsApi.exportUrl(id, format, { search, errorType: errorType ?? undefined, pendingOnly, from, to })}
                   download
                   title={`Download as ${format.toUpperCase()}`}
                   className="flex items-center gap-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"

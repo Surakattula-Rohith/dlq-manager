@@ -44,6 +44,8 @@ export interface MessageFilters {
   search?: string;
   errorType?: string;
   pendingOnly?: boolean;
+  from?: string; // ISO time: only messages that landed in the DLQ at or after it
+  to?: string;   // ISO time: only messages that landed before it
 }
 
 // Error breakdown types

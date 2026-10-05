@@ -28,6 +28,9 @@ import java.util.UUID;
  *                 messages failed into the DLQ in that time (replays don't lower it)
  * A bucket without samples (app stopped, topic added later) has no values, so the
  * chart shows a gap instead of a made-up zero.
+ *
+ * Samples are a minute apart, so a message is counted in the minute it was first seen:
+ * one that arrives seconds before the hour can show up in the next hour's count.
  */
 @Service
 @RequiredArgsConstructor

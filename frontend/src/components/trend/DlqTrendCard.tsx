@@ -38,7 +38,11 @@ function periodLabel(point: TrendPoint, bucketMinutes: number): string {
  * Pending messages and new failures over the last day or week, for one DLQ.
  * Two small charts instead of one with two scales: the numbers mean different things.
  */
-export function DlqTrendCard({ dlqTopicId }: { dlqTopicId: string }) {
+export function DlqTrendCard({ dlqTopicId, onSelectPeriod }: {
+  dlqTopicId: string;
+  // Called with the start and end of a period when it is clicked (or Enter is pressed on it)
+  onSelectPeriod?: (from: Date, to: Date) => void;
+}) {
   const [range, setRange] = useState<TrendRangeCode>('24h');
   const [showTable, setShowTable] = useState(false);
   const [hover, setHover] = useState<Hover>(null);
@@ -57,6 +61,11 @@ export function DlqTrendCard({ dlqTopicId }: { dlqTopicId: string }) {
   const newInRange = points.reduce((sum, point) => sum + (point.newMessages ?? 0), 0);
   const rangeLabel = RANGES.find((r) => r.code === range)!.label;
   const perPeriod = bucketMinutes === 60 ? 'per hour' : `per ${bucketMinutes / 60} hours`;
+
+  const selectPoint = onSelectPeriod && ((point: TrendPoint) => {
+    const from = new Date(point.time);
+    onSelectPeriod(from, new Date(from.getTime() + bucketMinutes * 60_000));
+  });
 
   const toggleClass = (active: boolean) =>
     `px-3 py-1 text-xs font-medium rounded-md transition-colors ${
@@ -116,7 +125,7 @@ export function DlqTrendCard({ dlqTopicId }: { dlqTopicId: string }) {
             </p>
             <TrendPlot
               points={points} measure="pending" range={range} bucketMinutes={bucketMinutes}
-              hover={hover} onHover={setHover}
+              hover={hover} onHover={setHover} onSelect={selectPoint}
             />
           </div>
           <div>
@@ -128,9 +137,14 @@ export function DlqTrendCard({ dlqTopicId }: { dlqTopicId: string }) {
             </p>
             <TrendPlot
               points={points} measure="newMessages" range={range} bucketMinutes={bucketMinutes}
-              hover={hover} onHover={setHover}
+              hover={hover} onHover={setHover} onSelect={selectPoint}
             />
           </div>
+          {selectPoint && (
+            <p className="lg:col-span-2 -mt-3 text-xs text-gray-400 dark:text-gray-500">
+              Click a period to list the messages that failed in it.
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -139,13 +153,14 @@ export function DlqTrendCard({ dlqTopicId }: { dlqTopicId: string }) {
 
 // ---- One chart ----
 
-function TrendPlot({ points, measure, range, bucketMinutes, hover, onHover }: {
+function TrendPlot({ points, measure, range, bucketMinutes, hover, onHover, onSelect }: {
   points: TrendPoint[];
   measure: Measure;
   range: TrendRangeCode;
   bucketMinutes: number;
   hover: Hover;
   onHover: (hover: Hover) => void;
+  onSelect?: (point: TrendPoint) => void;
 }) {
   const [containerRef, width] = useWidth<HTMLDivElement>();
 
@@ -171,6 +186,7 @@ function TrendPlot({ points, measure, range, bucketMinutes, hover, onHover }: {
     if (event.key === 'ArrowLeft') onHover({ index: Math.max(0, current - 1), source: measure });
     else if (event.key === 'ArrowRight') onHover({ index: Math.min(points.length - 1, current + 1), source: measure });
     else if (event.key === 'Escape') onHover(null);
+    else if (event.key === 'Enter' && onSelect && points[current]) onSelect(points[current]);
     else return;
     event.preventDefault();
   };
@@ -183,8 +199,9 @@ function TrendPlot({ points, measure, range, bucketMinutes, hover, onHover }: {
           height={HEIGHT}
           tabIndex={0}
           role="img"
-          aria-label={`${measure === 'pending' ? 'Pending messages' : 'New failures'}, last ${range === '24h' ? '24 hours' : '7 days'}. Use the left and right arrow keys to read each point.`}
-          className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded"
+          aria-label={`${measure === 'pending' ? 'Pending messages' : 'New failures'}, last ${range === '24h' ? '24 hours' : '7 days'}. Use the left and right arrow keys to read each point${onSelect ? ', Enter to list its messages' : ''}.`}
+          className={`block focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded ${onSelect ? 'cursor-pointer' : ''}`}
+          onClick={(event) => onSelect?.(points[indexAt(event.clientX, event.currentTarget)])}
           onPointerMove={(event: PointerEvent<SVGSVGElement>) =>
             onHover({ index: indexAt(event.clientX, event.currentTarget), source: measure })}
           onPointerLeave={() => onHover(null)}

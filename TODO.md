@@ -56,7 +56,7 @@
 ### Message Management
 - [x] Search messages by key, payload, or headers
 - [x] Filter by error type or replay status
-- [ ] Filter by date range
+- [x] Filter by time window (quick picks, custom range, or click a period on the trend chart)
 - [x] Export messages to JSON/CSV
 - [ ] Archive/delete messages from DLQ
 

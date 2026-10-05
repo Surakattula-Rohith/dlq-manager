@@ -27,7 +27,7 @@ This project started as a weekend experiment and has grown into a full platform 
 
 ## What it does
 
-- **Browse** failed messages across all your DLQ topics, paginated
+- **Browse** failed messages across all your DLQ topics, paginated — search them, filter by error type or by when they failed, or click a period on the trend chart to list its messages
 - **Analyze** error patterns with a per-topic error breakdown, and see whether a DLQ is growing or shrinking on a 24-hour / 7-day trend chart
 - **Replay** single or bulk messages back to the source topic, and see first whether the services reading that topic are running and keeping up (consumer lag) — with a warning before replaying into one that isn't
 - **Track** every replay operation with a full audit trail
@@ -227,6 +227,7 @@ CI runs the full backend suite plus frontend lint and build on every push.
 ![Trend: pending messages and new failures per hour](assets/33-topic-trend.png)
 ![Trend over 7 days (Dark)](assets/34-dark-topic-trend.png)
 ![Where replays go: consumers of the source topic and their lag](assets/35-source-consumers.png)
+![Messages from one hour, picked by clicking the trend chart](assets/36-time-filter.png)
 ![Filtered by error type, replayed messages hidden](assets/27-search-filter.png)
 ![Message Detail](assets/05-message-detail-modal.png)
 ![Message Browser Dark](assets/31-dark-topic-detail.png)
@@ -294,7 +295,7 @@ All other endpoints need a session (the web UI) or HTTP Basic credentials (scrip
 | `POST` | `/api/dlq-topics` | Register new DLQ topic |
 | `PUT` | `/api/dlq-topics/{id}` | Update DLQ configuration |
 | `DELETE` | `/api/dlq-topics/{id}` | Delete DLQ registration |
-| `GET` | `/api/dlq-topics/{id}/messages` | Browse messages (paginated; optional `search`, `errorType`, `pendingOnly` filters) |
+| `GET` | `/api/dlq-topics/{id}/messages` | Browse messages (paginated; optional `search`, `errorType`, `pendingOnly`, `from`, `to` filters) |
 | `GET` | `/api/dlq-topics/{id}/messages/export` | Download messages as `format=csv` or `format=json` (same filters) |
 | `GET` | `/api/dlq-topics/{id}/error-breakdown` | Error type statistics |
 | `GET` | `/api/dlq-topics/{id}/trend` | Pending messages and new failures over time (`range=24h` or `7d`) |
