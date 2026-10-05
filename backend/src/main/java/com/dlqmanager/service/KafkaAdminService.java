@@ -5,17 +5,32 @@ import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.ConsumerGroupDescription;
+import org.apache.kafka.clients.admin.ConsumerGroupListing;
+import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsResult;
+import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsSpec;
+import org.apache.kafka.clients.admin.ListOffsetsResult;
 import org.apache.kafka.clients.admin.ListTopicsOptions;
+import org.apache.kafka.clients.admin.OffsetSpec;
+import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.clients.admin.TopicListing;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.ConsumerGroupState;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -28,6 +43,11 @@ import java.util.stream.Collectors;
 public class KafkaAdminService {
 
     private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(5);
+
+    /**
+     * How long a page waits for Kafka when reading consumer groups
+     */
+    private static final long LOOKUP_TIMEOUT_SECONDS = 10;
 
     private final KafkaConfigService kafkaConfigService;
 
@@ -156,6 +176,127 @@ public class KafkaAdminService {
         } catch (InterruptedException | ExecutionException e) {
             log.error("Failed to get cluster information", e);
             throw new RuntimeException("Failed to get cluster info: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * A consumer group that reads a topic (it has committed offsets there)
+     *
+     * @param groupId the group's name - usually the name of the service that consumes
+     * @param state   Kafka's view of the group: STABLE (consumers running), EMPTY (none running), rebalancing, ...
+     * @param members consumers currently in the group
+     * @param lag     messages in the topic the group has not processed yet
+     */
+    public record ConsumerGroupLag(String groupId, ConsumerGroupState state, int members, long lag) {
+    }
+
+    /**
+     * Every consumer group that reads the given topic, and how far behind each one is
+     *
+     * lag = latest offset - committed offset, added up over the topic's partitions
+     *
+     * Groups this app may not read (on a secured cluster with ACLs) are left out instead of
+     * failing the whole lookup.
+     *
+     * @return empty if the topic doesn't exist
+     */
+    public Optional<List<ConsumerGroupLag>> getConsumerLag(String topicName) {
+        try {
+            AdminClient adminClient = adminClient();
+            List<TopicPartition> partitions = partitionsOf(adminClient, topicName);
+            if (partitions == null) {
+                return Optional.empty();
+            }
+
+            Collection<ConsumerGroupListing> groups = adminClient.listConsumerGroups().all()
+                    .get(LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (groups.isEmpty()) {
+                return Optional.of(List.of());
+            }
+
+            // Committed offsets of every group, for this topic's partitions only, in one request
+            Map<String, ListConsumerGroupOffsetsSpec> specs = new HashMap<>();
+            for (ConsumerGroupListing group : groups) {
+                specs.put(group.groupId(), new ListConsumerGroupOffsetsSpec().topicPartitions(partitions));
+            }
+            ListConsumerGroupOffsetsResult offsetsResult = adminClient.listConsumerGroupOffsets(specs);
+
+            Map<String, Map<TopicPartition, OffsetAndMetadata>> readers = new HashMap<>();
+            for (String groupId : specs.keySet()) {
+                try {
+                    Map<TopicPartition, OffsetAndMetadata> committed = new HashMap<>();
+                    offsetsResult.partitionsToOffsetAndMetadata(groupId).get(LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                            .forEach((partition, offset) -> {
+                                if (offset != null) {
+                                    committed.put(partition, offset);
+                                }
+                            });
+                    if (!committed.isEmpty()) {
+                        readers.put(groupId, committed);
+                    }
+                } catch (ExecutionException e) {
+                    log.debug("Skipping consumer group {}: {}", groupId, e.getMessage());
+                }
+            }
+            if (readers.isEmpty()) {
+                return Optional.of(List.of());
+            }
+
+            Map<TopicPartition, OffsetSpec> latest = partitions.stream()
+                    .collect(Collectors.toMap(partition -> partition, partition -> OffsetSpec.latest()));
+            Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> endOffsets = adminClient.listOffsets(latest).all()
+                    .get(LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            var descriptions = adminClient.describeConsumerGroups(readers.keySet()).describedGroups();
+
+            List<ConsumerGroupLag> result = new ArrayList<>();
+            for (Map.Entry<String, Map<TopicPartition, OffsetAndMetadata>> reader : readers.entrySet()) {
+                long lag = 0;
+                for (Map.Entry<TopicPartition, OffsetAndMetadata> committed : reader.getValue().entrySet()) {
+                    ListOffsetsResult.ListOffsetsResultInfo end = endOffsets.get(committed.getKey());
+                    if (end != null) {
+                        lag += Math.max(0, end.offset() - committed.getValue().offset());
+                    }
+                }
+
+                ConsumerGroupState state = ConsumerGroupState.UNKNOWN;
+                int members = 0;
+                try {
+                    ConsumerGroupDescription description = descriptions.get(reader.getKey())
+                            .get(LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                    state = description.state();
+                    members = description.members().size();
+                } catch (ExecutionException e) {
+                    log.debug("Could not describe consumer group {}: {}", reader.getKey(), e.getMessage());
+                }
+                result.add(new ConsumerGroupLag(reader.getKey(), state, members, lag));
+            }
+            return Optional.of(result);
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while reading consumer groups", e);
+        } catch (ExecutionException | TimeoutException e) {
+            log.error("Failed to read consumer groups of topic {}", topicName, e);
+            throw new RuntimeException("Failed to read consumer groups: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * @return the topic's partitions, or null if the topic doesn't exist
+     */
+    private static List<TopicPartition> partitionsOf(AdminClient adminClient, String topicName)
+            throws InterruptedException, ExecutionException, TimeoutException {
+        try {
+            TopicDescription description = adminClient.describeTopics(List.of(topicName)).allTopicNames()
+                    .get(LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS).get(topicName);
+            return description.partitions().stream()
+                    .map(partition -> new TopicPartition(topicName, partition.partition()))
+                    .toList();
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof UnknownTopicOrPartitionException) {
+                return null;
+            }
+            throw e;
         }
     }
 

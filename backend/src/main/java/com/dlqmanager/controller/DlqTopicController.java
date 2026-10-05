@@ -10,6 +10,7 @@ import com.dlqmanager.model.enums.TrendRange;
 import com.dlqmanager.service.DlqBrowserService;
 import com.dlqmanager.service.DlqDiscoveryService;
 import com.dlqmanager.service.DlqTrendService;
+import com.dlqmanager.service.SourceConsumerService;
 import com.dlqmanager.service.MessageExportWriter;
 import com.dlqmanager.service.MessageFilter;
 import jakarta.validation.Valid;
@@ -52,6 +53,7 @@ public class DlqTopicController {
     private final DlqBrowserService dlqBrowserService;
     private final MessageExportWriter messageExportWriter;
     private final DlqTrendService dlqTrendService;
+    private final SourceConsumerService sourceConsumerService;
 
     /**
      * List all registered DLQ topics
@@ -572,6 +574,37 @@ public class DlqTopicController {
 
         } catch (IllegalArgumentException e) {
             return createErrorResponse(HttpStatus.NOT_FOUND, e.getMessage());
+        }
+    }
+
+    /**
+     * Who reads the DLQ's source topic, and are they keeping up?
+     *
+     * GET /api/dlq-topics/{id}/source-consumers
+     *
+     * Every consumer group with committed offsets on the source topic: its state, how many
+     * consumers are running, its lag (messages not processed yet) and a status -
+     * CAUGHT_UP, BEHIND, NOT_RUNNING or REBALANCING. Remembered for 30 seconds.
+     */
+    @GetMapping("/{id}/source-consumers")
+    public ResponseEntity<Map<String, Object>> getSourceConsumers(@PathVariable UUID id) {
+        try {
+            SourceConsumerService.SourceConsumers result = sourceConsumerService.getSourceConsumers(id);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("sourceTopic", result.sourceTopic());
+            response.put("topicExists", result.topicExists());
+            response.put("consumers", result.consumers());
+            return ResponseEntity.ok(response);
+
+        } catch (IllegalArgumentException e) {
+            return createErrorResponse(HttpStatus.NOT_FOUND, e.getMessage());
+
+        } catch (Exception e) {
+            log.error("Failed to read the consumers of the source topic for DLQ topic: {}", id, e);
+            return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not read the consumer groups: " + e.getMessage());
         }
     }
 
