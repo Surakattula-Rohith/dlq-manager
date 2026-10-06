@@ -11,7 +11,7 @@
 
 A full-stack dashboard for managing Kafka Dead Letter Queues — browse failed messages, analyze error patterns, replay them back to source topics, and get alerted when things go wrong.
 
-> A quick tour: sign in as an operator, filter the failed messages by error type, replay two of them, and see the replay in the activity log.
+> A quick tour: sign in as an operator, open the 7-day trend and click a spike to list what failed then, check who would receive a replay, try two messages on a test topic, replay them for real, and find both in the replay history and the activity log.
 
 ![Demo](assets/Animation.gif)
 
