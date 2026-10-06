@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -37,7 +38,9 @@ import java.util.UUID;
  *                   (pending = not replayed yet, so replaying the DLQ clears the alert)
  *    - TIME_WINDOW: new messages in the last X minutes >= threshold
  *                   (compared against the sample taken at the start of the window)
- *    Skipped while the rule is in cooldown or has a snoozed alert.
+ *    A rule has at most one open alert: it is raised when the problem starts, reminded
+ *    once per cooldown while nobody has acknowledged or snoozed it, and resolved when
+ *    the problem goes away (see evaluateRule).
  * 4. Deletes count samples older than 7 days
  */
 @Service
@@ -157,6 +160,17 @@ public class AlertEvaluatorService {
         return false;
     }
 
+    /**
+     * One rule, one open alert.
+     *
+     * - Problem there, no open alert: raise one (unless the rule is snoozed or in cooldown)
+     * - Problem still there, alert open: keep that alert. While nobody has acknowledged or
+     *   snoozed it, remind the channel once per cooldown. Never raise a second one.
+     * - Problem gone: mark the open alert resolved. If it comes back, a new alert is raised.
+     *
+     * Raising a new alert every cooldown (the earlier behaviour) buried a lasting problem
+     * under one "firing" alert per hour.
+     */
     private void evaluateRule(AlertRule rule, DlqBrowserService.MessageCounts counts, LocalDateTime now) {
         long pendingCount = counts.pending();
 
@@ -164,62 +178,110 @@ public class AlertEvaluatorService {
         rule.setLastCheckedCount(pendingCount);
         rule.setLastCheckedAt(now);
 
-        // Respect snooze: someone said "not now" for this rule
-        if (alertEventRepository.existsByAlertRuleIdAndStatusAndSnoozedUntilAfter(rule.getId(), AlertStatus.SNOOZED, now)) {
-            log.debug("Rule '{}' is snoozed", rule.getName());
+        Long observedValue = observedValue(rule, counts, now);
+        boolean problem = observedValue != null && observedValue >= rule.getThreshold();
+        Optional<AlertEvent> openAlert = openAlert(rule, now);
+
+        if (!problem) {
+            openAlert.ifPresent(alert -> {
+                alert.setResolvedAt(now);
+                alertEventRepository.save(alert);
+                log.info("Alert resolved: rule='{}' topic='{}'", rule.getName(), rule.getDlqTopic().getDlqTopicName());
+            });
             alertRuleRepository.save(rule);
             return;
         }
 
-        // Respect cooldown
-        if (rule.getLastFiredAt() != null) {
-            long minutesSinceFired = Duration.between(rule.getLastFiredAt(), now).toMinutes();
-            if (minutesSinceFired < rule.getCooldownMinutes()) {
-                log.debug("Rule '{}' is in cooldown ({}/{} min)", rule.getName(), minutesSinceFired, rule.getCooldownMinutes());
-                alertRuleRepository.save(rule);
-                return;
+        boolean inCooldown = rule.getLastFiredAt() != null
+                && Duration.between(rule.getLastFiredAt(), now).toMinutes() < rule.getCooldownMinutes();
+
+        if (openAlert.isPresent()) {
+            AlertEvent alert = openAlert.get();
+            alert.setMessageCount(pendingCount);
+            alertEventRepository.save(alert);
+
+            // Acknowledged or snoozed: someone knows. Still firing: remind, but only once per cooldown.
+            if (alert.getStatus() == AlertStatus.FIRING && !inCooldown) {
+                log.info("Alert still firing, reminding: rule='{}' value={}", rule.getName(), observedValue);
+                rule.setLastFiredAt(now);
+                notifyChannel(rule, observedValue);
             }
+            alertRuleRepository.save(rule);
+            return;
         }
 
-        boolean shouldFire = false;
-        long observedValue = pendingCount;
+        // No open alert. A snooze that is still running means "not now" for this rule,
+        // and the cooldown keeps a problem that comes and goes from raising an alert a minute.
+        boolean snoozed = alertEventRepository.existsByAlertRuleIdAndStatusAndSnoozedUntilAfter(
+                rule.getId(), AlertStatus.SNOOZED, now);
+        if (snoozed || inCooldown) {
+            log.debug("Rule '{}' is {}", rule.getName(), snoozed ? "snoozed" : "in cooldown");
+            alertRuleRepository.save(rule);
+            return;
+        }
 
+        log.info("Alert fired: rule='{}' topic='{}' value={} threshold={}",
+                rule.getName(), rule.getDlqTopic().getDlqTopicName(), observedValue, rule.getThreshold());
+
+        AlertEvent event = new AlertEvent();
+        event.setAlertRule(rule);
+        event.setStatus(AlertStatus.FIRING);
+        event.setMessageCount(pendingCount);
+        event.setTriggeredAt(now);
+        alertEventRepository.save(event);
+
+        rule.setLastFiredAt(now);
+        notifyChannel(rule, observedValue);
+        alertRuleRepository.save(rule);
+    }
+
+    /**
+     * The number the rule compares with its threshold
+     * - THRESHOLD:   pending messages
+     * - TIME_WINDOW: new messages since the start of the window
+     *
+     * @return null if the rule can't be evaluated (a time-window rule without a window)
+     */
+    private Long observedValue(AlertRule rule, DlqBrowserService.MessageCounts counts, LocalDateTime now) {
         if (rule.getAlertType() == AlertType.THRESHOLD) {
-            shouldFire = pendingCount >= rule.getThreshold();
-
-        } else if (rule.getAlertType() == AlertType.TIME_WINDOW) {
+            return counts.pending();
+        }
+        if (rule.getAlertType() == AlertType.TIME_WINDOW) {
             if (rule.getWindowMinutes() == null || rule.getWindowMinutes() <= 0) {
                 log.warn("Rule '{}' is a time-window rule without a window, skipping", rule.getName());
-            } else {
-                LocalDateTime windowStart = now.minusMinutes(rule.getWindowMinutes());
-                long newMessages = dlqCountSampleRepository
-                        .findFirstByDlqTopicIdAndSampledAtGreaterThanEqualOrderBySampledAtAsc(rule.getDlqTopic().getId(), windowStart)
-                        .map(baseline -> counts.endOffsetSum() - baseline.getEndOffsetSum())
-                        .orElse(0L);
-
-                observedValue = Math.max(0, newMessages);
-                shouldFire = observedValue >= rule.getThreshold();
+                return null;
             }
+            LocalDateTime windowStart = now.minusMinutes(rule.getWindowMinutes());
+            long newMessages = dlqCountSampleRepository
+                    .findFirstByDlqTopicIdAndSampledAtGreaterThanEqualOrderBySampledAtAsc(rule.getDlqTopic().getId(), windowStart)
+                    .map(baseline -> counts.endOffsetSum() - baseline.getEndOffsetSum())
+                    .orElse(0L);
+            return Math.max(0, newMessages);
         }
+        return null;
+    }
 
-        if (shouldFire) {
-            log.info("Alert fired: rule='{}' topic='{}' value={} threshold={}",
-                    rule.getName(), rule.getDlqTopic().getDlqTopicName(), observedValue, rule.getThreshold());
-
-            AlertEvent event = new AlertEvent();
-            event.setAlertRule(rule);
-            event.setStatus(AlertStatus.FIRING);
-            event.setMessageCount(pendingCount);
-            event.setTriggeredAt(now);
-            alertEventRepository.save(event);
-
-            rule.setLastFiredAt(now);
-
-            if (rule.getNotificationChannel() != null) {
-                notificationService.sendNotification(rule.getNotificationChannel(), rule, observedValue);
-            }
+    /**
+     * The rule's open (not yet resolved) alert, if any.
+     *
+     * Data from before "one open alert per rule" can hold several: the newest stays open
+     * and the older duplicates are resolved here, so they stop counting as active.
+     */
+    private Optional<AlertEvent> openAlert(AlertRule rule, LocalDateTime now) {
+        List<AlertEvent> open = alertEventRepository.findByAlertRuleIdAndResolvedAtIsNullOrderByTriggeredAtDesc(rule.getId());
+        if (open.isEmpty()) {
+            return Optional.empty();
         }
+        for (AlertEvent duplicate : open.subList(1, open.size())) {
+            duplicate.setResolvedAt(now);
+            alertEventRepository.save(duplicate);
+        }
+        return Optional.of(open.get(0));
+    }
 
-        alertRuleRepository.save(rule);
+    private void notifyChannel(AlertRule rule, long observedValue) {
+        if (rule.getNotificationChannel() != null) {
+            notificationService.sendNotification(rule.getNotificationChannel(), rule, observedValue);
+        }
     }
 }

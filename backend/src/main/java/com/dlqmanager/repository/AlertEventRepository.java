@@ -14,6 +14,13 @@ public interface AlertEventRepository extends JpaRepository<AlertEvent, UUID> {
     List<AlertEvent> findAllByOrderByTriggeredAtDesc();
     List<AlertEvent> findByStatus(AlertStatus status);
     long countByStatus(AlertStatus status);
+
+    // Alerts in this state whose problem is still there (e.g. "firing right now")
+    long countByStatusAndResolvedAtIsNull(AlertStatus status);
+
+    // The open alert(s) of a rule, newest first. Normally one; more only in data from
+    // before a rule was limited to one open alert.
+    List<AlertEvent> findByAlertRuleIdAndResolvedAtIsNullOrderByTriggeredAtDesc(UUID alertRuleId);
     void deleteByAlertRuleId(UUID alertRuleId);
 
     // Is this rule currently snoozed? (a SNOOZED event whose snooze hasn't ended yet)

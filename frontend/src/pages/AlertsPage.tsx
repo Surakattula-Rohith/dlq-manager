@@ -253,7 +253,7 @@ export function AlertsPage() {
                         <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{event.alertRuleName}</td>
                         <td className="px-4 py-3 text-gray-600 dark:text-gray-400 font-mono text-xs">{event.dlqTopicName}</td>
                         <td className="px-4 py-3">
-                          <EventStatusBadge status={event.status} snoozedUntil={event.snoozedUntil} />
+                          <EventStatusBadge status={event.status} snoozedUntil={event.snoozedUntil} resolvedAt={event.resolvedAt} />
                           {event.status === 'ACKNOWLEDGED' && event.acknowledgedBy && (
                             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">by {event.acknowledgedBy}</p>
                           )}
@@ -266,7 +266,7 @@ export function AlertsPage() {
                           {formatDateTime(event.triggeredAt)}
                         </td>
                         <td className="px-4 py-3">
-                          {event.status === 'FIRING' && canOperate && (
+                          {event.status === 'FIRING' && !event.resolvedAt && canOperate && (
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => acknowledgeMutation.mutate(event.id)}
@@ -341,7 +341,16 @@ function StatCard({ label, value, icon: Icon, color }: {
   );
 }
 
-function EventStatusBadge({ status, snoozedUntil }: { status: string; snoozedUntil?: string }) {
+function EventStatusBadge({ status, snoozedUntil, resolvedAt }: { status: string; snoozedUntil?: string; resolvedAt?: string }) {
+  // The problem went away by itself (or after a replay): nothing left to do, whoever did or didn't react
+  if (resolvedAt && status !== 'ACKNOWLEDGED') return (
+    <span
+      className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full text-xs font-medium"
+      title={`The problem ended ${formatDateTime(resolvedAt)}`}
+    >
+      Resolved
+    </span>
+  );
   if (status === 'FIRING') return (
     <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-xs font-medium w-fit">
       <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />

@@ -50,6 +50,14 @@ public class AlertEvent {
     @Column(name = "snoozed_by")
     private String snoozedBy;
 
+    /**
+     * When the problem went away (the rule's condition stopped holding). Null while the
+     * alert is open. A rule has at most one open alert; a new one is raised only after
+     * this one is resolved.
+     */
+    @Column(name = "resolved_at")
+    private LocalDateTime resolvedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

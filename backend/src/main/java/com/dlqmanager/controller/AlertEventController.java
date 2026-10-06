@@ -81,6 +81,7 @@ public class AlertEventController {
         m.put("acknowledgedAt", ApiTime.utc(event.getAcknowledgedAt()));
         m.put("acknowledgedBy", event.getAcknowledgedBy());
         m.put("snoozedUntil", ApiTime.utc(event.getSnoozedUntil()));
+        m.put("resolvedAt", ApiTime.utc(event.getResolvedAt()));
         m.put("snoozedBy", event.getSnoozedBy());
         return m;
     }

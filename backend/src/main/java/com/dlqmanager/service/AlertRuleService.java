@@ -152,6 +152,7 @@ public class AlertRuleService {
     }
 
     public long countFiringAlerts() {
-        return alertEventRepository.countByStatus(AlertStatus.FIRING);
+        // Firing and not resolved: the problem is still there and nobody has acknowledged or snoozed it
+        return alertEventRepository.countByStatusAndResolvedAtIsNull(AlertStatus.FIRING);
     }
 }

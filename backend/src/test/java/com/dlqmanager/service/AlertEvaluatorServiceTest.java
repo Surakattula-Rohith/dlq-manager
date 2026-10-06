@@ -199,6 +199,110 @@ class AlertEvaluatorServiceTest {
         verify(dlqCountSampleRepository, times(1)).save(any(DlqCountSample.class));
     }
 
+    // --- One open alert per rule ---
+
+    @Test
+    void whileAnAlertIsOpenNoSecondOneIsRaised() {
+        NotificationChannel slack = new NotificationChannel();
+        AlertRule rule = thresholdRule(40);
+        rule.setNotificationChannel(slack);
+        rule.setCooldownMinutes(60);
+        rule.setLastFiredAt(LocalDateTime.now().minusMinutes(61));
+        AlertEvent open = openAlert(rule, AlertStatus.FIRING, 56);
+        givenRules(rule);
+        givenCounts(70, 0, 72);
+
+        alertEvaluatorService.evaluateAlerts();
+
+        // The same alert is kept (with the current number), and the channel is reminded
+        assertThat(savedEvent()).isSameAs(open);
+        assertThat(open.getMessageCount()).isEqualTo(70L);
+        assertThat(open.getResolvedAt()).isNull();
+        verify(notificationService).sendNotification(slack, rule, 70L);
+        assertThat(rule.getLastFiredAt()).isAfter(LocalDateTime.now().minusMinutes(1));
+    }
+
+    @Test
+    void openAlertIsNotRemindedInsideTheCooldown() {
+        AlertRule rule = thresholdRule(40);
+        rule.setNotificationChannel(new NotificationChannel());
+        rule.setCooldownMinutes(60);
+        rule.setLastFiredAt(LocalDateTime.now().minusMinutes(10));
+        openAlert(rule, AlertStatus.FIRING, 56);
+        givenRules(rule);
+        givenCounts(56, 0, 58);
+
+        alertEvaluatorService.evaluateAlerts();
+
+        verify(notificationService, never()).sendNotification(any(), any(), anyLong());
+    }
+
+    @Test
+    void acknowledgedAlertStaysQuietWhileTheProblemLasts() {
+        AlertRule rule = thresholdRule(40);
+        rule.setNotificationChannel(new NotificationChannel());
+        rule.setLastFiredAt(LocalDateTime.now().minusHours(5));
+        AlertEvent acknowledged = openAlert(rule, AlertStatus.ACKNOWLEDGED, 56);
+        givenRules(rule);
+        givenCounts(56, 0, 58);
+
+        alertEvaluatorService.evaluateAlerts();
+
+        assertThat(savedEvent()).isSameAs(acknowledged);
+        assertThat(acknowledged.getStatus()).isEqualTo(AlertStatus.ACKNOWLEDGED);
+        verify(notificationService, never()).sendNotification(any(), any(), anyLong());
+    }
+
+    @Test
+    void alertIsResolvedWhenTheProblemGoesAway() {
+        AlertRule rule = thresholdRule(40);
+        rule.setNotificationChannel(new NotificationChannel());
+        AlertEvent open = openAlert(rule, AlertStatus.FIRING, 56);
+        givenRules(rule);
+        givenCounts(56, 30, 58);   // 30 replayed -> 26 pending, below the threshold of 40
+
+        alertEvaluatorService.evaluateAlerts();
+
+        assertThat(savedEvent()).isSameAs(open);
+        assertThat(open.getResolvedAt()).isNotNull();
+        verify(notificationService, never()).sendNotification(any(), any(), anyLong());
+    }
+
+    @Test
+    void timeWindowAlertIsResolvedOnceTheBurstIsOver() {
+        AlertRule rule = timeWindowRule(3, 5);
+        AlertEvent open = openAlert(rule, AlertStatus.FIRING, 56);
+        givenRules(rule);
+        givenCounts(56, 0, 58);
+        givenBaselineEndOffsetSum(58);   // nothing new in the last 5 minutes
+
+        alertEvaluatorService.evaluateAlerts();
+
+        assertThat(open.getResolvedAt()).isNotNull();
+    }
+
+    @Test
+    void duplicatesFromBeforeAreResolvedAndOnlyTheNewestStaysOpen() {
+        AlertRule rule = thresholdRule(40);
+        rule.setLastFiredAt(LocalDateTime.now().minusMinutes(5));
+        AlertEvent newest = new AlertEvent();
+        newest.setStatus(AlertStatus.FIRING);
+        AlertEvent older = new AlertEvent();
+        older.setStatus(AlertStatus.FIRING);
+        AlertEvent oldest = new AlertEvent();
+        oldest.setStatus(AlertStatus.FIRING);
+        when(alertEventRepository.findByAlertRuleIdAndResolvedAtIsNullOrderByTriggeredAtDesc(rule.getId()))
+                .thenReturn(List.of(newest, older, oldest));
+        givenRules(rule);
+        givenCounts(56, 0, 58);
+
+        alertEvaluatorService.evaluateAlerts();
+
+        assertThat(newest.getResolvedAt()).isNull();
+        assertThat(older.getResolvedAt()).isNotNull();
+        assertThat(oldest.getResolvedAt()).isNotNull();
+    }
+
     // --- Sampling for the trend chart ---
 
     @Test
@@ -285,6 +389,20 @@ class AlertEvaluatorServiceTest {
         rule.setAlertType(AlertType.TIME_WINDOW);
         rule.setWindowMinutes(windowMinutes);
         return rule;
+    }
+
+    /**
+     * The rule already has an alert that has not been resolved
+     */
+    private AlertEvent openAlert(AlertRule rule, AlertStatus status, long messageCount) {
+        AlertEvent open = new AlertEvent();
+        open.setAlertRule(rule);
+        open.setStatus(status);
+        open.setMessageCount(messageCount);
+        open.setTriggeredAt(LocalDateTime.now().minusHours(3));
+        when(alertEventRepository.findByAlertRuleIdAndResolvedAtIsNullOrderByTriggeredAtDesc(rule.getId()))
+                .thenReturn(List.of(open));
+        return open;
     }
 
     private void givenRules(AlertRule... rules) {

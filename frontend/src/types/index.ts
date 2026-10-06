@@ -176,6 +176,7 @@ export interface AlertEvent {
   acknowledgedBy?: string;
   snoozedUntil?: string;
   snoozedBy?: string;
+  resolvedAt?: string; // set once the problem went away; a rule has one open alert at a time
 }
 
 // Dashboard types

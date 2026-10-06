@@ -32,7 +32,7 @@ This project started as a weekend experiment and has grown into a full platform 
 - **Replay** single or bulk messages back to the source topic, and see first whether the services reading that topic are running and keeping up (consumer lag) — with a warning before replaying into one that isn't. A **test replay** sends them to another topic first; those messages stay pending until the real replay
 - **Track** every replay operation with a full audit trail
 - **Configure** Kafka connections from the UI — no restart needed, including clusters that need a login and encryption (SASL + TLS)
-- **Alert** when a DLQ crosses a threshold, with Slack notifications
+- **Alert** when a DLQ crosses a threshold, with Slack notifications — one alert per problem, reminded until someone acknowledges it, and resolved automatically once the backlog is cleared
 - **Share** with a team: sign-in with viewer, operator and admin roles
 - **Audit** who did what on the Activity page: replays, alert actions, sign-ins and every configuration change
 - **Follow** the team in Slack: replays, alert actions and setup changes are posted to the channels that opt in

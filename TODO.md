@@ -70,6 +70,9 @@
 - [ ] Real-time message count updates
 - [x] Consumer lag of the source topic on each DLQ page, with a warning before replaying into a stopped or lagging service
 
+### Alerting
+- [x] One open alert per rule: reminded once per cooldown until acknowledged, resolved automatically when the problem ends (no more duplicate alerts)
+
 ### Deployment
 - [x] Run the whole app with one `docker compose up` (backend + frontend images)
 - [ ] Kubernetes Helm chart
