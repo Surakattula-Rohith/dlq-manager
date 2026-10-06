@@ -62,7 +62,8 @@ public interface ReplayMessageRepository extends JpaRepository<ReplayMessage, UU
      * @param status the status to filter by
      * @return list of replay results across all jobs for that topic
      */
-    @Query("SELECT rm FROM ReplayMessage rm WHERE rm.replayJob.dlqTopic.id = :dlqTopicId AND rm.status = :status")
+    @Query("SELECT rm FROM ReplayMessage rm WHERE rm.replayJob.dlqTopic.id = :dlqTopicId AND rm.status = :status "
+            + "AND rm.replayJob.targetTopic IS NULL")
     List<ReplayMessage> findReplaysForDlqTopic(@Param("dlqTopicId") UUID dlqTopicId,
                                                @Param("status") ReplayMessageStatus status);
 
@@ -72,6 +73,7 @@ public interface ReplayMessageRepository extends JpaRepository<ReplayMessage, UU
      */
     @Query("SELECT rm FROM ReplayMessage rm WHERE rm.replayJob.dlqTopic.id = :dlqTopicId "
             + "AND rm.dlqPartition = :partition AND rm.dlqOffset = :offset AND rm.status = :status "
+            + "AND rm.replayJob.targetTopic IS NULL "
             + "ORDER BY rm.replayedAt DESC")
     List<ReplayMessage> findReplaysOfMessage(@Param("dlqTopicId") UUID dlqTopicId,
                                              @Param("partition") Integer partition,

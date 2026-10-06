@@ -73,7 +73,9 @@ public class ReplayController {
             // Build success response
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Message replayed successfully");
+            response.put("message", replayJob.isTestReplay()
+                    ? "Test replay: message sent to " + replayJob.getTargetTopic() + " (it stays pending)"
+                    : "Message replayed successfully");
             response.put("replayJob", replayJob);
 
             log.info("Successfully replayed message. Job ID: {}", replayJob.getId());
@@ -148,6 +150,11 @@ public class ReplayController {
             } else {
                 message = String.format("Bulk replay completed: %d succeeded, %d failed",
                         replayJob.getSucceeded(), replayJob.getFailed());
+            }
+            if (replayJob.isTestReplay()) {
+                // Say plainly that this was not the real replay
+                message = String.format("Test replay to %s: %d sent, %d failed (the messages stay pending)",
+                        replayJob.getTargetTopic(), replayJob.getSucceeded(), replayJob.getFailed());
             }
             response.put("message", message);
             response.put("replayJob", replayJob);

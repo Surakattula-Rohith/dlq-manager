@@ -72,6 +72,7 @@ public class ReplayService {
     private final KafkaConsumerPool consumerPool;
     private final ActivityLogService activityLogService;
     private final ReplayClaimService replayClaimService;
+    private final KafkaAdminService kafkaAdminService;
 
     public ReplayService(
             DlqTopicRepository dlqTopicRepository,
@@ -80,7 +81,8 @@ public class ReplayService {
             ReplayProducer replayProducer,
             KafkaConsumerPool consumerPool,
             ActivityLogService activityLogService,
-            ReplayClaimService replayClaimService
+            ReplayClaimService replayClaimService,
+            KafkaAdminService kafkaAdminService
     ) {
         this.dlqTopicRepository = dlqTopicRepository;
         this.replayJobRepository = replayJobRepository;
@@ -89,6 +91,38 @@ public class ReplayService {
         this.consumerPool = consumerPool;
         this.activityLogService = activityLogService;
         this.replayClaimService = replayClaimService;
+        this.kafkaAdminService = kafkaAdminService;
+    }
+
+    /**
+     * Where a replay sends its messages
+     *
+     * @param topic the source topic, or the topic chosen for a test replay
+     * @param test  true for a test replay: the messages stay pending, because the real
+     *              replay to the source topic hasn't happened
+     */
+    private record Destination(String topic, boolean test) {
+        String describe() {
+            return test ? "test replay to " + topic + ": " : "";
+        }
+    }
+
+    /**
+     * @param targetTopic empty (or the source topic itself) for a normal replay
+     * @throws IllegalArgumentException if the test topic is the DLQ itself or doesn't exist
+     */
+    private Destination destinationOf(DlqTopic dlqTopic, String targetTopic) {
+        if (targetTopic == null || targetTopic.isBlank() || targetTopic.trim().equals(dlqTopic.getSourceTopic())) {
+            return new Destination(dlqTopic.getSourceTopic(), false);
+        }
+        String topic = targetTopic.trim();
+        if (topic.equals(dlqTopic.getDlqTopicName())) {
+            throw new IllegalArgumentException("Messages can't be replayed into the DLQ they came from");
+        }
+        if (!kafkaAdminService.topicExists(topic)) {
+            throw new IllegalArgumentException("Topic '" + topic + "' doesn't exist in Kafka");
+        }
+        return new Destination(topic, true);
     }
 
     /**
@@ -120,12 +154,13 @@ public class ReplayService {
         String initiatedBy = request.getInitiatedBy() != null ? request.getInitiatedBy() : "system";
         int partition = request.getMessagePartition();
         long offset = request.getMessageOffset();
+        Destination destination = destinationOf(dlqTopic, request.getTargetTopic());
 
         // Step 2: Claim the message, so nobody else can replay it at the same moment
         UUID claimId = replayClaimService.tryClaim(dlqTopic.getId(), partition, offset, initiatedBy)
                 .orElseThrow(() -> new IllegalStateException(beingReplayedMessage(partition, offset)));
         try {
-            return replayClaimedMessage(request, dlqTopic, initiatedBy);
+            return replayClaimedMessage(request, dlqTopic, initiatedBy, destination);
         } finally {
             replayClaimService.release(claimId);
         }
@@ -135,9 +170,11 @@ public class ReplayService {
      * The rest of a single replay. Only runs while holding the claim on the message,
      * so the "already replayed?" check can't race with another replay of it.
      */
-    private ReplayJobDto replayClaimedMessage(ReplayRequestDto request, DlqTopic dlqTopic, String initiatedBy) {
-        // Don't send the same message twice unless the caller explicitly asks for it
-        if (!Boolean.TRUE.equals(request.getForce())) {
+    private ReplayJobDto replayClaimedMessage(ReplayRequestDto request, DlqTopic dlqTopic, String initiatedBy,
+                                              Destination destination) {
+        // Don't send the same message twice unless the caller explicitly asks for it.
+        // A test replay goes somewhere else, so it may repeat (and may follow a real replay).
+        if (!destination.test() && !Boolean.TRUE.equals(request.getForce())) {
             List<ReplayMessage> previous = replayMessageRepository.findReplaysOfMessage(
                     dlqTopic.getId(), request.getMessagePartition(), request.getMessageOffset(), ReplayMessageStatus.SUCCESS);
             if (!previous.isEmpty()) {
@@ -152,6 +189,7 @@ public class ReplayService {
         replayJob.setInitiatedBy(initiatedBy);
         replayJob.setStatus(ReplayStatus.PENDING);
         replayJob.setTotalMessages(1);  // Single message
+        replayJob.setTargetTopic(destination.test() ? destination.topic() : null);
         replayJob.setSucceeded(0);
         replayJob.setFailed(0);
         replayJobRepository.save(replayJob);
@@ -182,18 +220,19 @@ public class ReplayService {
             log.info("Successfully read message. Key: {}, Value length: {} bytes",
                     record.key(), record.value() != null ? record.value().length() : 0);
 
-            // Step 6: Send message to source topic
-            log.info("Sending message to source topic: {}", dlqTopic.getSourceTopic());
+            // Step 6: Send message to the source topic (or the test topic)
+            log.info("Sending message to topic: {}", destination.topic());
 
             List<Header> headers = new ArrayList<>();
             record.headers().forEach(headers::add);
 
             RecordMetadata metadata = replayProducer.sendMessage(
-                    dlqTopic.getSourceTopic(),
+                    destination.topic(),
                     record.key(),
                     record.value(),
                     headers,
-                    initiatedBy
+                    initiatedBy,
+                    destination.test()
             );
 
             log.info("Message sent successfully. Partition: {}, Offset: {}",
@@ -217,7 +256,7 @@ public class ReplayService {
 
             log.info("Replay job completed successfully: {}", replayJob.getId());
             activityLogService.record(initiatedBy, ActivityAction.MESSAGES_REPLAYED, dlqTopic.getDlqTopicName(),
-                    describeSingle(request, "sent"));
+                    destination.describe() + describeSingle(request, "sent"));
 
         } catch (Exception e) {
             log.error("Replay failed for job: {}", replayJob.getId(), e);
@@ -239,7 +278,7 @@ public class ReplayService {
             );
 
             activityLogService.record(initiatedBy, ActivityAction.MESSAGES_REPLAYED, dlqTopic.getDlqTopicName(),
-                    describeSingle(request, "failed: " + e.getMessage()));
+                    destination.describe() + describeSingle(request, "failed: " + e.getMessage()));
 
             throw new RuntimeException("Failed to replay message: " + e.getMessage(), e);
         }
@@ -283,7 +322,9 @@ public class ReplayService {
         log.info("Found DLQ topic: {} → source topic: {}", dlqTopic.getDlqTopicName(), dlqTopic.getSourceTopic());
 
         String initiatedBy = request.getInitiatedBy() != null ? request.getInitiatedBy() : "system";
-        boolean force = Boolean.TRUE.equals(request.getForce());
+        Destination destination = destinationOf(dlqTopic, request.getTargetTopic());
+        // A test replay goes somewhere else, so "already replayed" doesn't block it
+        boolean force = Boolean.TRUE.equals(request.getForce()) || destination.test();
 
         // Step 2: Create ReplayJob record
         ReplayJob replayJob = new ReplayJob();
@@ -291,6 +332,7 @@ public class ReplayService {
         replayJob.setInitiatedBy(initiatedBy);
         replayJob.setStatus(ReplayStatus.PENDING);
         replayJob.setTotalMessages(request.getMessages().size());
+        replayJob.setTargetTopic(destination.test() ? destination.topic() : null);
         replayJob.setSucceeded(0);
         replayJob.setFailed(0);
         replayJobRepository.save(replayJob);
@@ -332,7 +374,7 @@ public class ReplayService {
                 }
 
                 try {
-                    if (replayClaimedBulkMessage(consumer, replayJob, dlqTopic, msgId, force, initiatedBy)) {
+                    if (replayClaimedBulkMessage(consumer, replayJob, dlqTopic, msgId, force, initiatedBy, destination)) {
                         successCount++;
                     } else {
                         failureCount++;
@@ -353,8 +395,9 @@ public class ReplayService {
         log.info("Bulk replay completed. Job ID: {}, Succeeded: {}, Failed: {}",
                 replayJob.getId(), successCount, failureCount);
         activityLogService.record(initiatedBy, ActivityAction.MESSAGES_REPLAYED, dlqTopic.getDlqTopicName(),
-                String.format("%d message(s): %d succeeded, %d failed%s",
-                        request.getMessages().size(), successCount, failureCount, force ? " (forced)" : ""));
+                destination.describe() + String.format("%d message(s): %d succeeded, %d failed%s",
+                        request.getMessages().size(), successCount, failureCount,
+                        Boolean.TRUE.equals(request.getForce()) ? " (forced)" : ""));
 
         // Step 6: Convert to DTO and return
         return ReplayJobDto.fromEntity(replayJob);
@@ -364,11 +407,11 @@ public class ReplayService {
      * Replay one message of a bulk replay and record the result.
      * Only runs while holding the claim on the message.
      *
-     * @return true if the message was sent to the source topic
+     * @return true if the message was sent to the destination
      */
     private boolean replayClaimedBulkMessage(KafkaConsumer<String, String> consumer, ReplayJob replayJob,
                                              DlqTopic dlqTopic, BulkReplayRequestDto.MessageIdentifier msgId,
-                                             boolean force, String initiatedBy) {
+                                             boolean force, String initiatedBy, Destination destination) {
         // Already replayed? Record why it was skipped instead of sending a duplicate
         if (!force) {
             List<ReplayMessage> previous = replayMessageRepository.findReplaysOfMessage(
@@ -398,16 +441,17 @@ public class ReplayService {
                 return false;
             }
 
-            // Send message to source topic
+            // Send message to the source topic (or the test topic)
             List<Header> headers = new ArrayList<>();
             record.headers().forEach(headers::add);
 
             RecordMetadata metadata = replayProducer.sendMessage(
-                    dlqTopic.getSourceTopic(),
+                    destination.topic(),
                     record.key(),
                     record.value(),
                     headers,
-                    initiatedBy
+                    initiatedBy,
+                    destination.test()
             );
 
             log.info("Message replayed successfully. Key: {}, Offset: {}", record.key(), metadata.offset());

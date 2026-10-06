@@ -218,6 +218,116 @@ class ReplayIntegrationTest extends IntegrationTestBase {
         return request;
     }
 
+    // --- Test replays: to a chosen topic instead of the source ---
+
+    @Test
+    void testReplayGoesToTheChosenTopicAndLeavesTheMessagesPending() throws Exception {
+        String source = uniqueTopic("orders");
+        String dlq = source + "-dlq";
+        String testTopic = source + "-test";
+        createTopic(source, 1);
+        createTopic(dlq, 1);
+        createTopic(testTopic, 1);
+        produce(dlq, 0, 2, Map.of("X-Error-Message", "DB Connection Timeout"));
+        UUID id = register(dlq, source);
+
+        BulkReplayRequestDto toTestTopic = bulk(id, false, 0L, 1L);
+        toTestTopic.setTargetTopic(testTopic);
+        ReplayJobDto job = replayService.bulkReplayMessages(toTestTopic);
+
+        assertThat(job.getSucceeded()).isEqualTo(2);
+        assertThat(job.isTestReplay()).isTrue();
+        assertThat(job.getTargetTopic()).isEqualTo(testTopic);
+
+        // The messages are in the test topic, marked as a test, and nothing reached the source
+        List<ConsumerRecord<String, String>> sent = readAll(testTopic, 2);
+        assertThat(sent).hasSize(2);
+        assertThat(headerNames(sent.get(0)))
+                .contains("X-Replay-Test", "X-Replayed-At", "X-Replayed-By")
+                .doesNotContain("X-Error-Message");
+        assertThat(readAll(source, 0)).isEmpty();
+
+        // They still count as pending: the real replay hasn't happened
+        DlqBrowserService.MessageCounts afterTest = dlqBrowserService.getMessageCounts(id);
+        assertThat(afterTest.replayed()).isZero();
+        assertThat(afterTest.pending()).isEqualTo(2);
+
+        // So the real replay is not blocked as "already replayed"
+        ReplayJobDto real = replayService.bulkReplayMessages(bulk(id, false, 0L, 1L));
+        assertThat(real.getSucceeded()).isEqualTo(2);
+        assertThat(real.isTestReplay()).isFalse();
+        assertThat(real.getTargetTopic()).isEqualTo(source);
+        assertThat(readAll(source, 2)).hasSize(2);
+        assertThat(dlqBrowserService.getMessageCounts(id).replayed()).isEqualTo(2);
+
+        // And testing again afterwards is still possible: it sends nothing to the source
+        assertThat(replayService.bulkReplayMessages(toTestTopic).getSucceeded()).isEqualTo(2);
+        assertThat(readAll(source, 2)).hasSize(2);
+    }
+
+    @Test
+    void singleMessageCanBeTestReplayedToo() throws Exception {
+        String source = uniqueTopic("orders");
+        String dlq = source + "-dlq";
+        String testTopic = source + "-test";
+        createTopic(source, 1);
+        createTopic(dlq, 1);
+        createTopic(testTopic, 1);
+        produce(dlq, 0, 1, Map.of());
+        UUID id = register(dlq, source);
+
+        ReplayRequestDto request = single(id, 0L, false);
+        request.setTargetTopic(testTopic);
+        ReplayJobDto job = replayService.replayMessage(request);
+
+        assertThat(job.isTestReplay()).isTrue();
+        assertThat(readAll(testTopic, 1)).hasSize(1);
+        assertThat(dlqBrowserService.getMessageCounts(id).pending()).isEqualTo(1);
+    }
+
+    @Test
+    void testReplayIntoTheDlqItselfOrAMissingTopicIsRefused() throws Exception {
+        String source = uniqueTopic("orders");
+        String dlq = source + "-dlq";
+        createTopic(source, 1);
+        createTopic(dlq, 1);
+        produce(dlq, 0, 1, Map.of());
+        UUID id = register(dlq, source);
+
+        BulkReplayRequestDto intoItself = bulk(id, false, 0L);
+        intoItself.setTargetTopic(dlq);
+        assertThatThrownBy(() -> replayService.bulkReplayMessages(intoItself))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("DLQ they came from");
+
+        ReplayRequestDto toNowhere = single(id, 0L, false);
+        toNowhere.setTargetTopic(uniqueTopic("never-created"));
+        assertThatThrownBy(() -> replayService.replayMessage(toNowhere))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("doesn't exist in Kafka");
+
+        // Nothing was sent or recorded
+        assertThat(replayService.getReplayHistoryForDlq(id)).isEmpty();
+        assertThat(readAll(dlq, 1)).hasSize(1);
+    }
+
+    @Test
+    void choosingTheSourceTopicIsJustANormalReplay() throws Exception {
+        String source = uniqueTopic("orders");
+        String dlq = source + "-dlq";
+        createTopic(source, 1);
+        createTopic(dlq, 1);
+        produce(dlq, 0, 1, Map.of());
+        UUID id = register(dlq, source);
+
+        BulkReplayRequestDto request = bulk(id, false, 0L);
+        request.setTargetTopic(source);
+        ReplayJobDto job = replayService.bulkReplayMessages(request);
+
+        assertThat(job.isTestReplay()).isFalse();
+        assertThat(dlqBrowserService.getMessageCounts(id).replayed()).isEqualTo(1);
+    }
+
     private static ReplayRequestDto single(UUID dlqTopicId, long offset, boolean force) {
         ReplayRequestDto request = new ReplayRequestDto();
         request.setDlqTopicId(dlqTopicId);

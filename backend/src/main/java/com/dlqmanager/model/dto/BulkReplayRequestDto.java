@@ -59,6 +59,12 @@ public class BulkReplayRequestDto {
     private Boolean force;
 
     /**
+     * Test replay: send the messages to this topic instead of the DLQ's source topic.
+     * They are not marked as replayed. Leave empty for a normal replay.
+     */
+    private String targetTopic;
+
+    /**
      * Inner class to identify a message by offset and partition
      */
     @Data

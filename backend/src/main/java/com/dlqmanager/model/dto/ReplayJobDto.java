@@ -42,6 +42,16 @@ public class ReplayJobDto {
     private String sourceTopic;
 
     /**
+     * Where the messages were sent: the source topic, or the chosen topic of a test replay
+     */
+    private String targetTopic;
+
+    /**
+     * True if this was a test replay (sent to another topic, messages not marked as replayed)
+     */
+    private boolean testReplay;
+
+    /**
      * Who initiated this replay
      */
     private String initiatedBy;
@@ -106,6 +116,8 @@ public class ReplayJobDto {
                 entity.getDlqTopic().getId(),
                 entity.getDlqTopic().getDlqTopicName(),
                 entity.getDlqTopic().getSourceTopic(),
+                entity.isTestReplay() ? entity.getTargetTopic() : entity.getDlqTopic().getSourceTopic(),
+                entity.isTestReplay(),
                 entity.getInitiatedBy(),
                 entity.getStatus(),
                 entity.getTotalMessages(),

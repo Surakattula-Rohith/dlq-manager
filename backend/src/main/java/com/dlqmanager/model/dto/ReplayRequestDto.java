@@ -64,4 +64,10 @@ public class ReplayRequestDto {
      * Default false - protects against sending the same message twice by accident
      */
     private Boolean force;
+
+    /**
+     * Test replay: send the message to this topic instead of the DLQ's source topic.
+     * It is not marked as replayed. Leave empty for a normal replay.
+     */
+    private String targetTopic;
 }

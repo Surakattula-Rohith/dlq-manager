@@ -69,7 +69,7 @@ public class ReplayProducer {
      */
     public RecordMetadata sendMessage(String topic, String key, String value, List<Header> originalHeaders)
             throws Exception {
-        return sendMessage(topic, key, value, originalHeaders, null);
+        return sendMessage(topic, key, value, originalHeaders, null, false);
     }
 
     /**
@@ -87,16 +87,18 @@ public class ReplayProducer {
      * @param value         message payload (JSON string)
      * @param originalHeaders headers from DLQ message
      * @param replayedBy      who started the replay (added as X-Replayed-By), can be null
+     * @param testReplay      true when this goes to a test topic (adds X-Replay-Test: true)
      * @return RecordMetadata containing partition and offset where message was stored
      * @throws Exception if sending fails (timeout, broker error, serialization error)
      */
     public RecordMetadata sendMessage(String topic, String key, String value,
-                                      List<Header> originalHeaders, String replayedBy) throws Exception {
+                                      List<Header> originalHeaders, String replayedBy,
+                                      boolean testReplay) throws Exception {
 
         log.info("Sending message to topic: {}, key: {}", topic, key);
 
         // Step 1: Prepare headers
-        List<Header> headers = prepareHeaders(originalHeaders, replayedBy);
+        List<Header> headers = prepareHeaders(originalHeaders, replayedBy, testReplay);
 
         // Step 2: Create ProducerRecord
         ProducerRecord<String, String> record = new ProducerRecord<>(
@@ -184,12 +186,14 @@ public class ReplayProducer {
      * Headers to ADD:
      * - X-Replayed-At: Timestamp when replayed (ISO 8601 format)
      * - X-Replayed-By: Who initiated the replay
+     * - X-Replay-Test: "true" on a test replay, so whatever reads the test topic can tell
      *
      * @param originalHeaders headers from DLQ message
      * @param replayedBy      who started the replay, can be null
+     * @param testReplay      true when the message goes to a test topic
      * @return cleaned headers with replay marker
      */
-    private List<Header> prepareHeaders(List<Header> originalHeaders, String replayedBy) {
+    private List<Header> prepareHeaders(List<Header> originalHeaders, String replayedBy, boolean testReplay) {
         List<Header> cleanedHeaders = new ArrayList<>();
 
         // Copy original headers except the ones we want to remove
@@ -199,7 +203,8 @@ public class ReplayProducer {
                 String headerKey = header.key();
                 if (DlqHeaders.isDlqOnlyHeader(headerKey)) {
                     log.debug("Removing DLQ header: {}", headerKey);
-                } else if ("X-Replayed-At".equals(headerKey) || "X-Replayed-By".equals(headerKey)) {
+                } else if ("X-Replayed-At".equals(headerKey) || "X-Replayed-By".equals(headerKey)
+                        || "X-Replay-Test".equals(headerKey)) {
                     log.debug("Replacing previous replay header: {}", headerKey);
                 } else {
                     cleanedHeaders.add(header);
@@ -214,6 +219,10 @@ public class ReplayProducer {
 
         if (replayedBy != null && !replayedBy.isBlank()) {
             cleanedHeaders.add(new RecordHeader("X-Replayed-By", replayedBy.getBytes(StandardCharsets.UTF_8)));
+        }
+
+        if (testReplay) {
+            cleanedHeaders.add(new RecordHeader("X-Replay-Test", "true".getBytes(StandardCharsets.UTF_8)));
         }
 
         log.debug("Added replay marker header: X-Replayed-At={}", replayTimestamp);

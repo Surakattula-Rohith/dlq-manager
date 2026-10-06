@@ -54,6 +54,13 @@ public class ReplayJob {
     private String initiatedBy;
 
     /**
+     * Set only for a test replay: the topic the messages were sent to instead of the source topic.
+     * Messages of a test replay do not count as replayed.
+     */
+    @Column(name = "target_topic")
+    private String targetTopic;
+
+    /**
      * Current status of the replay job
      * PENDING → RUNNING → COMPLETED/FAILED
      */
@@ -144,6 +151,10 @@ public class ReplayJob {
      *
      * @return true if status is COMPLETED or FAILED
      */
+    public boolean isTestReplay() {
+        return targetTopic != null;
+    }
+
     public boolean isComplete() {
         return status == ReplayStatus.COMPLETED || status == ReplayStatus.FAILED;
     }
