@@ -108,8 +108,16 @@ export function ReplayHistoryPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-gray-900 dark:text-white font-medium">{job.dlqTopicName || '-'}</span>
-                        {job.sourceTopic && (
-                          <span className="text-gray-500 dark:text-gray-400 text-sm ml-2">→ {job.sourceTopic}</span>
+                        {(job.targetTopic || job.sourceTopic) && (
+                          <span className="text-gray-500 dark:text-gray-400 text-sm ml-2">→ {job.targetTopic || job.sourceTopic}</span>
+                        )}
+                        {job.testReplay && (
+                          <span
+                            title="Sent to another topic to try the messages out. They still count as pending."
+                            className="ml-2 inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                          >
+                            Test
+                          </span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

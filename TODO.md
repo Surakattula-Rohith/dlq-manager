@@ -63,7 +63,7 @@
 ### Replay Enhancements
 - [ ] Scheduled replays
 - [ ] Replay to a different topic
-- [ ] Dry-run mode (validate without sending)
+- [x] Test replay: send messages to another topic to try them out; they stay pending until the real replay
 
 ### Analytics
 - [x] Trend chart per DLQ: pending messages and new failures over the last 24 hours or 7 days

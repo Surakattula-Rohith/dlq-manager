@@ -6,6 +6,7 @@ import { DlqTrendCard } from '../components/trend/DlqTrendCard';
 import { SourceConsumersCard } from '../components/consumers/SourceConsumersCard';
 import { replayWarning, useSourceConsumers } from '../hooks/useSourceConsumers';
 import { dlqTopicsApi } from '../api/dlqTopics';
+import { kafkaApi } from '../api/kafka';
 import { replayApi } from '../api/replay';
 import type { DlqMessage } from '../types';
 import { usePermissions } from '../context/AuthContext';
@@ -88,6 +89,14 @@ export function DlqTopicDetailPage() {
 
   // Who reads the source topic: checked before replaying, so nobody replays into a stopped service unawares
   const { data: sourceConsumers } = useSourceConsumers(id);
+
+  // Test replay: '' sends to the source topic (the real replay), anything else is a topic to try the messages on
+  const [sendTo, setSendTo] = useState('');
+  const { data: kafkaTopics = [] } = useQuery({
+    queryKey: ['kafkaTopics'],
+    queryFn: kafkaApi.getTopics,
+    enabled: canOperate,
+  });
 
   const { data: topic } = useQuery({
     queryKey: ['dlqTopic', id],
@@ -178,7 +187,10 @@ export function DlqTopicDetailPage() {
   const replayMutation = useMutation({
     mutationFn: replayApi.replayBulk,
     onSuccess: (data) => {
-      setSelectedMessages(new Set());
+      // After a test replay the same messages are still pending: keep them selected for the real one
+      if (!data.replayJob.testReplay) {
+        setSelectedMessages(new Set());
+      }
       refetch();
       queryClient.invalidateQueries({ queryKey: ['replayHistory'] });
       queryClient.invalidateQueries({ queryKey: ['sourceConsumers', id] });
@@ -224,7 +236,8 @@ export function DlqTopicDetailPage() {
       return { partition, offset };
     });
 
-    const warning = replayWarning(sourceConsumers, messages.length);
+    // The consumers of the source topic only matter when the messages actually go there
+    const warning = sendTo === '' ? replayWarning(sourceConsumers, messages.length) : null;
     if (warning && !window.confirm(`${warning}\n\nReplay anyway?`)) {
       return;
     }
@@ -233,6 +246,7 @@ export function DlqTopicDetailPage() {
       await replayMutation.mutateAsync({
         dlqTopicId: id,
         messages,
+        targetTopic: sendTo || undefined,
       });
     } catch {
       // Error is shown by the mutation's onError handler
@@ -479,13 +493,32 @@ export function DlqTopicDetailPage() {
                 <span className="text-sm text-gray-500 dark:text-gray-400">
                   {selectedMessages.size} selected
                 </span>
+                <label className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                  Send to
+                  <select
+                    value={sendTo}
+                    onChange={(e) => setSendTo(e.target.value)}
+                    className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 max-w-64"
+                  >
+                    <option value="">{topic?.sourceTopic ?? 'source topic'} (source)</option>
+                    {kafkaTopics
+                      .map((kafkaTopic) => kafkaTopic.name)
+                      .filter((name) => name !== topic?.sourceTopic && name !== topic?.dlqTopicName)
+                      .map((name) => (
+                        <option key={name} value={name}>{name} (test)</option>
+                      ))}
+                  </select>
+                </label>
                 <button
                   onClick={handleReplaySelected}
                   disabled={replayMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                  title={sendTo ? 'The messages are copied to this topic and stay pending here' : undefined}
+                  className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 ${
+                    sendTo ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'
+                  }`}
                 >
                   <Play className="w-4 h-4" />
-                  Replay Selected ({selectedMessages.size})
+                  {sendTo ? `Test replay (${selectedMessages.size})` : `Replay Selected (${selectedMessages.size})`}
                 </button>
               </>
             )}

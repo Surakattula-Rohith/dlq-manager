@@ -100,6 +100,8 @@ export interface ReplayJob {
   dlqTopicId: string;
   dlqTopicName?: string;
   sourceTopic?: string;
+  targetTopic?: string;  // where the messages went: the source topic, or the topic of a test replay
+  testReplay?: boolean;  // true = sent to another topic to try them out; the messages stay pending
   initiatedBy: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'PARTIALLY_COMPLETED';
   totalMessages: number;
@@ -122,6 +124,7 @@ export interface BulkReplayRequest {
   dlqTopicId: string;
   messages: { offset: number; partition: number }[];
   force?: boolean;
+  targetTopic?: string; // test replay: send here instead of the source topic
 }
 
 // Alert types

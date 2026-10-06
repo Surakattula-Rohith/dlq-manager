@@ -29,7 +29,7 @@ This project started as a weekend experiment and has grown into a full platform 
 
 - **Browse** failed messages across all your DLQ topics, paginated — search them, filter by error type or by when they failed, or click a period on the trend chart to list its messages
 - **Analyze** error patterns with a per-topic error breakdown, and see whether a DLQ is growing or shrinking on a 24-hour / 7-day trend chart
-- **Replay** single or bulk messages back to the source topic, and see first whether the services reading that topic are running and keeping up (consumer lag) — with a warning before replaying into one that isn't
+- **Replay** single or bulk messages back to the source topic, and see first whether the services reading that topic are running and keeping up (consumer lag) — with a warning before replaying into one that isn't. A **test replay** sends them to another topic first; those messages stay pending until the real replay
 - **Track** every replay operation with a full audit trail
 - **Configure** Kafka connections from the UI — no restart needed, including clusters that need a login and encryption (SASL + TLS)
 - **Alert** when a DLQ crosses a threshold, with Slack notifications
@@ -228,6 +228,7 @@ CI runs the full backend suite plus frontend lint and build on every push.
 ![Trend over 7 days (Dark)](assets/34-dark-topic-trend.png)
 ![Where replays go: consumers of the source topic and their lag](assets/35-source-consumers.png)
 ![Messages from one hour, picked by clicking the trend chart](assets/36-time-filter.png)
+![Test replay: two messages sent to a test topic, still pending](assets/37-test-replay.png)
 ![Filtered by error type, replayed messages hidden](assets/27-search-filter.png)
 ![Message Detail](assets/05-message-detail-modal.png)
 ![Message Browser Dark](assets/31-dark-topic-detail.png)
@@ -305,7 +306,7 @@ All other endpoints need a session (the web UI) or HTTP Basic credentials (scrip
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/replay/single` | Replay single message |
-| `POST` | `/api/replay/bulk` | Replay multiple messages |
+| `POST` | `/api/replay/bulk` | Replay multiple messages (`targetTopic` = test replay to that topic) |
 | `GET` | `/api/replay/history` | All replay jobs |
 
 ### Kafka & Configuration
