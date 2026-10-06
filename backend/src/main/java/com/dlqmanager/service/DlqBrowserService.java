@@ -5,6 +5,7 @@ import com.dlqmanager.model.entity.DlqTopic;
 import com.dlqmanager.repository.DlqTopicRepository;
 import com.dlqmanager.repository.ReplayMessageRepository;
 import com.dlqmanager.util.DlqHeaders;
+import com.dlqmanager.util.ApiTime;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -16,7 +17,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -539,7 +539,7 @@ public class DlqBrowserService {
             dto.setReplayed(true);
             LocalDateTime replayedAt = replayedOffsets.get(key);
             // The app runs in UTC (see DlqManagerApplication), so send an ISO instant the browser can convert
-            dto.setReplayedAt(replayedAt != null ? replayedAt.toInstant(ZoneOffset.UTC).toString() : null);
+            dto.setReplayedAt(ApiTime.utc(replayedAt));
         }
     }
 

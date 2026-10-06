@@ -3,6 +3,7 @@ package com.dlqmanager.controller;
 import com.dlqmanager.model.entity.ActivityEvent;
 import com.dlqmanager.model.enums.ActivityAction;
 import com.dlqmanager.service.ActivityLogService;
+import com.dlqmanager.util.ApiTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -61,7 +61,7 @@ public class ActivityController {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", event.getId().toString());
         // The app runs in UTC, so send an instant the browser can show in local time
-        m.put("occurredAt", event.getOccurredAt().toInstant(ZoneOffset.UTC).toString());
+        m.put("occurredAt", ApiTime.utc(event.getOccurredAt()));
         m.put("username", event.getUsername());
         m.put("action", event.getAction().name());
         m.put("target", event.getTarget());

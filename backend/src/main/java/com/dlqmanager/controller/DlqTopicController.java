@@ -13,6 +13,7 @@ import com.dlqmanager.service.DlqTrendService;
 import com.dlqmanager.service.SourceConsumerService;
 import com.dlqmanager.service.MessageExportWriter;
 import com.dlqmanager.service.MessageFilter;
+import com.dlqmanager.util.ApiTime;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +34,6 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
@@ -603,7 +603,7 @@ public class DlqTopicController {
                     .map(point -> {
                         Map<String, Object> m = new LinkedHashMap<>();
                         // The app runs in UTC (see DlqManagerApplication); the browser shows local time
-                        m.put("time", point.start().toInstant(ZoneOffset.UTC).toString());
+                        m.put("time", ApiTime.utc(point.start()));
                         m.put("pending", point.pending());
                         m.put("newMessages", point.newMessages());
                         return m;

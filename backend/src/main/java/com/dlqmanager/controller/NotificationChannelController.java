@@ -4,6 +4,7 @@ import com.dlqmanager.model.entity.NotificationChannel;
 import com.dlqmanager.model.enums.ActivityCategory;
 import com.dlqmanager.model.enums.NotificationChannelType;
 import com.dlqmanager.service.NotificationChannelService;
+import com.dlqmanager.util.ApiTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -121,8 +122,8 @@ public class NotificationChannelController {
         m.put("configuration", notificationChannelService.maskedConfiguration(channel)); // webhook URL is a secret
         m.put("enabled", channel.isEnabled());
         m.put("activityFeed", channel.getActivityFeed().stream().map(Enum::name).toList());
-        m.put("createdAt", channel.getCreatedAt() != null ? channel.getCreatedAt().toString() : null);
-        m.put("updatedAt", channel.getUpdatedAt() != null ? channel.getUpdatedAt().toString() : null);
+        m.put("createdAt", ApiTime.utc(channel.getCreatedAt()));
+        m.put("updatedAt", ApiTime.utc(channel.getUpdatedAt()));
         return m;
     }
 

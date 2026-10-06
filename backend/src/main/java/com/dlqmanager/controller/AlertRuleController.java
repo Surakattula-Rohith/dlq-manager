@@ -3,6 +3,7 @@ package com.dlqmanager.controller;
 import com.dlqmanager.model.entity.AlertRule;
 import com.dlqmanager.model.enums.AlertType;
 import com.dlqmanager.service.AlertRuleService;
+import com.dlqmanager.util.ApiTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -133,9 +134,9 @@ public class AlertRuleController {
         m.put("windowMinutes", rule.getWindowMinutes());
         m.put("cooldownMinutes", rule.getCooldownMinutes());
         m.put("enabled", rule.isEnabled());
-        m.put("lastFiredAt", rule.getLastFiredAt() != null ? rule.getLastFiredAt().toString() : null);
-        m.put("createdAt", rule.getCreatedAt() != null ? rule.getCreatedAt().toString() : null);
-        m.put("updatedAt", rule.getUpdatedAt() != null ? rule.getUpdatedAt().toString() : null);
+        m.put("lastFiredAt", ApiTime.utc(rule.getLastFiredAt()));
+        m.put("createdAt", ApiTime.utc(rule.getCreatedAt()));
+        m.put("updatedAt", ApiTime.utc(rule.getUpdatedAt()));
         if (rule.getNotificationChannel() != null) {
             m.put("notificationChannelId", rule.getNotificationChannel().getId().toString());
             m.put("notificationChannelName", rule.getNotificationChannel().getName());

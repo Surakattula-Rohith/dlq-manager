@@ -2,6 +2,7 @@ package com.dlqmanager.controller;
 
 import com.dlqmanager.model.entity.AlertEvent;
 import com.dlqmanager.service.AlertRuleService;
+import com.dlqmanager.util.ApiTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -76,10 +77,10 @@ public class AlertEventController {
         m.put("dlqTopicName", event.getAlertRule().getDlqTopic().getDlqTopicName());
         m.put("status", event.getStatus().name());
         m.put("messageCount", event.getMessageCount());
-        m.put("triggeredAt", event.getTriggeredAt() != null ? event.getTriggeredAt().toString() : null);
-        m.put("acknowledgedAt", event.getAcknowledgedAt() != null ? event.getAcknowledgedAt().toString() : null);
+        m.put("triggeredAt", ApiTime.utc(event.getTriggeredAt()));
+        m.put("acknowledgedAt", ApiTime.utc(event.getAcknowledgedAt()));
         m.put("acknowledgedBy", event.getAcknowledgedBy());
-        m.put("snoozedUntil", event.getSnoozedUntil() != null ? event.getSnoozedUntil().toString() : null);
+        m.put("snoozedUntil", ApiTime.utc(event.getSnoozedUntil()));
         m.put("snoozedBy", event.getSnoozedBy());
         return m;
     }
